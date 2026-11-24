@@ -1,0 +1,1091 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="author" content="Subhajit Majumder">
+<meta name="description" content="ChemSimulator: AI and data-science driven chemical process simulation platform with machine learning, curve fitting, Monte Carlo and optimization, by Subhajit Majumder.">
+<title>ChemSimulator</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: instrument-panel page. Header, serpentine flowsheet, live readout strip, then one calculation module at a time. */
+:root{
+  --bg:#EAF0F2; --panel:#F7FAFB; --ink:#0E1C27; --muted:#4E6270; --line:#C7D4DA;
+  --accent:#0A7C77; --accent-ink:#FFFFFF; --warn:#B4531A; --s2:#1F5FA8; --ok:#1E7A45;
+  --font-display:"Barlow Condensed","Arial Narrow",sans-serif;
+  --font-body:"IBM Plex Sans",system-ui,sans-serif;
+  --font-mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0B151C; --panel:#12212B; --ink:#E4EDF1; --muted:#8FA6B3; --line:#2D4553; --accent:#3CC4BC; --accent-ink:#06201F; --warn:#F09A62; --s2:#7DB2F2; --ok:#5CC98A; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0B151C; --panel:#12212B; --ink:#E4EDF1; --muted:#8FA6B3; --line:#2D4553; --accent:#3CC4BC; --accent-ink:#06201F; --warn:#F09A62; --s2:#7DB2F2; --ok:#5CC98A; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--font-body);font-size:15px;line-height:1.5;
+  padding-block:20px 40px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.wrap{max-width:1040px;margin:0 auto;display:flex;flex-direction:column;gap:22px}
+header{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap}
+h1{font-family:var(--font-display);font-weight:700;font-size:clamp(34px,7vw,52px);letter-spacing:.06em;line-height:1;margin:0;text-transform:uppercase}
+.sub{color:var(--muted);margin:6px 0 0;max-width:56ch}
+.by{font-family:var(--font-mono);font-size:12px;color:var(--muted);margin-top:8px}
+.by b{color:var(--ink);font-weight:500}
+button{font:inherit;color:inherit;cursor:pointer}
+.theme{border:1px solid var(--line);background:var(--panel);padding:6px 14px;border-radius:4px;font-size:13px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:16px}
+.flowhead{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:8px}
+h2{font-family:var(--font-display);font-weight:600;font-size:22px;letter-spacing:.05em;text-transform:uppercase;margin:0}
+.tog{font-size:13px;color:var(--muted);display:flex;gap:6px;align-items:center}
+svg.flow{width:100%;height:auto;display:block;max-width:640px;margin:0 auto}
+.node rect{fill:var(--bg);stroke:var(--line);stroke-width:1.5}
+.node text{fill:var(--ink);font-family:var(--font-display);font-weight:600;font-size:19px;letter-spacing:.05em;text-anchor:middle;text-transform:uppercase;pointer-events:none}
+.node text.k{font-family:var(--font-mono);font-size:11px;fill:var(--muted);text-transform:none;letter-spacing:0;font-weight:400}
+.node.unit{cursor:pointer}
+.node.unit:hover rect,.node.unit.on rect{stroke:var(--accent);stroke-width:2.5}
+.node.unit.on rect{fill:color-mix(in srgb,var(--accent) 14%,var(--bg))}
+.node.unit:focus-visible rect{stroke:var(--accent);stroke-width:3}
+.pipe{fill:none;stroke:var(--accent);stroke-width:3;stroke-dasharray:8 8;opacity:.85}
+.anim .pipe{animation:dash 1s linear infinite}
+@keyframes dash{to{stroke-dashoffset:-16}}
+@media (prefers-reduced-motion:reduce){.anim .pipe{animation:none}}
+.note{font-size:12.5px;color:var(--muted);margin:8px 0 0;text-align:center}
+.strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.strip button{background:var(--panel);border:0;text-align:left;padding:12px 14px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.strip button:hover,.strip button.on{background:color-mix(in srgb,var(--accent) 12%,var(--panel))}
+.strip .l{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+.strip .v{font-family:var(--font-mono);font-size:20px;font-weight:500;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.strip .u{font-size:12px;color:var(--muted);font-family:var(--font-mono)}
+.mod[hidden]{display:none}
+.modgrid{display:grid;grid-template-columns:minmax(0,320px) minmax(0,1fr);gap:20px;margin-top:12px}
+@media (max-width:760px){.modgrid{grid-template-columns:minmax(0,1fr)}}
+.desc{color:var(--muted);font-size:13.5px;margin:4px 0 0}
+.fields{align-content:start;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.fields label{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--muted);min-width:0}
+.fields input,.fields select{font:inherit;font-family:var(--font-mono);font-size:14px;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:7px 8px;width:100%;min-width:0}
+.res{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:12px}
+.res div{border-left:3px solid var(--accent);padding:2px 0 2px 10px;min-width:0}
+.res .l{font-size:12px;color:var(--muted);display:block}
+.res .v{font-family:var(--font-mono);font-size:18px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.res .v.bad{color:var(--warn)}
+.msg{font-size:13px;color:var(--warn);min-height:20px;margin:0 0 6px}
+.chartbox{overflow-x:auto}
+svg.chart{width:100%;height:auto;display:block;min-width:300px;touch-action:pan-y}
+svg.chart text{font-family:var(--font-mono);font-size:11px;fill:var(--muted)}
+.readout{font-family:var(--font-mono);font-size:12.5px;color:var(--muted);min-height:20px;margin-top:4px}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12.5px;color:var(--muted);margin-top:6px}
+.legend i{display:inline-block;width:14px;height:3px;vertical-align:middle;margin-right:6px}
+.hint{font-size:12px;color:var(--muted);margin-top:2px}
+footer{font-size:12.5px;color:var(--muted);border-top:1px solid var(--line);padding-top:14px}
+footer b{color:var(--ink);font-weight:500}
+
+/* ---- illustrated hero and equipment flowsheet ---- */
+.hero{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr);gap:12px;align-items:center;border-radius:10px;padding:26px 28px;
+  background:radial-gradient(120% 90% at 80% 20%,#12303a 0%,#0B1820 55%,#070e13 100%);color:#E4EDF1;border:1px solid #1d3441;overflow:hidden}
+.hero .eyebrow{font-family:var(--font-mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#3CC4BC;margin-bottom:10px}
+.hero h1{color:#F2F8FA}
+.hero .sub{color:#9DB3BF;margin:12px 0 0}
+.hero .by{color:#9DB3BF}.hero .by b{color:#F2F8FA}
+.hero .theme{margin-top:16px;background:#12212B;border-color:#2D4553;color:#E4EDF1}
+.scene{width:100%;max-width:380px;height:auto;justify-self:center}
+.flowline{animation:dash 1s linear infinite}
+@media (max-width:760px){.hero{grid-template-columns:minmax(0,1fr);padding:20px 18px}.scene{max-width:300px}}
+.chainbox{overflow-x:auto;padding:4px 0 8px}
+.chain{display:flex;align-items:center;min-width:860px;padding:16px;border-radius:10px;
+  background:linear-gradient(180deg,#0E1E28,#0A141B);border:1px solid #1d3441}
+.eq{flex:0 0 auto;width:116px;display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px 6px 8px;border-radius:10px;
+  background:#0B151C;border:1.5px solid #27424f;color:#E4EDF1;font:inherit}
+.eq svg{width:80px;height:64px}
+.eq span{font-family:var(--font-display);font-weight:600;font-size:16px;letter-spacing:.06em;text-transform:uppercase}
+.eq.static{opacity:.75}
+.eq.unit{border-color:#3CC4BC;cursor:pointer;transition:transform .15s,box-shadow .15s}
+.eq.unit:hover{transform:translateY(-3px);box-shadow:0 6px 18px #3cc4bc33}
+.eq.unit.on{background:#10303a;box-shadow:0 0 0 2px #3CC4BC,0 6px 22px #3cc4bc44}
+.conn{flex:1 1 20px;min-width:20px;height:4px;background:repeating-linear-gradient(90deg,#3CC4BC 0 8px,transparent 8px 16px);background-size:16px 4px;opacity:.9}
+.conn.warm{background-image:repeating-linear-gradient(90deg,#F09A62 0 8px,transparent 8px 16px)}
+.chain.anim .conn{animation:slide 1s linear infinite}
+@keyframes slide{to{background-position:16px 0}}
+@media (prefers-reduced-motion:reduce){.chain.anim .conn,.flowline{animation:none}}
+/* ---- Data Lab ---- */
+.stack{display:flex;flex-direction:column;gap:12px;min-width:0}
+.lab{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted)}
+textarea{font:inherit;font-family:var(--font-mono);font-size:13px;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:8px;width:100%;resize:vertical;min-width:0}
+.btnrow{display:flex;gap:8px;flex-wrap:wrap}
+.btn{display:inline-block;border:1px solid var(--line);background:var(--bg);color:var(--ink);padding:7px 14px;border-radius:4px;font-size:13px;cursor:pointer;text-decoration:none}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+.btn:disabled{opacity:.55;cursor:progress}
+h3{font-size:13px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin:12px 0 4px}
+.legend i.dot{width:9px;height:9px;border-radius:50%}
+.tor{display:flex;flex-direction:column;gap:6px}
+.tor div{display:grid;grid-template-columns:92px minmax(0,1fr) 48px;gap:8px;align-items:center;font-size:12.5px}
+.tor .bar{height:10px;background:var(--line);border-radius:2px;position:relative;overflow:hidden}
+.tor .bar i{position:absolute;left:0;top:0;bottom:0;background:var(--accent)}
+.tor .bar i.neg{background:var(--warn)}
+.tor b{font-family:var(--font-mono);font-weight:500;text-align:right}
+.hero .btn{margin-top:16px;background:#3CC4BC;color:#06201F;border-color:#3CC4BC;font-weight:600}
+.hero .cta{display:flex;gap:10px;flex-wrap:wrap}
+.noprint{margin:0}
+@media print{
+  :root{--bg:#fff;--panel:#fff;--ink:#111;--muted:#444;--line:#bbb;--accent:#0A7C77;--s2:#1F5FA8;--warn:#B4531A;--ok:#1E7A45}
+  body{background:#fff;color:#111}
+  .hero .scene,.cta,.tabs,.btnrow,.noprint,.chainbox,.strip,.theme,.tog,.note{display:none!important}
+  .hero{background:#fff;color:#111;border:0;padding:0}.hero h1,.hero .sub,.hero .by,.hero .by b{color:#111}
+  .mod[hidden],.tabp[hidden]{display:none!important}
+  .panel{break-inside:avoid;border:1px solid #bbb}
+}
+.fields select{font-size:13px;padding:7px 4px}
+
+/* ---- v4: motion, flow telemetry, presets, tabs, kinetics workbench ---- */
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.mod:not([hidden]),.tabp:not([hidden]){animation:fadeIn .28s ease both}
+.strip{gap:10px;background:none;border:0;border-radius:0;overflow:visible}
+.strip button{border:1px solid var(--line);border-radius:6px;transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease,background .18s}
+.strip button:hover,.strip button:focus-visible{transform:translateY(-3px);box-shadow:0 8px 20px rgba(5,15,22,.28);border-color:var(--accent)}
+.strip button.on{border-color:var(--accent)}
+.chain{--pc:#3CC4BC;min-width:980px}
+.conn{background-image:repeating-linear-gradient(90deg,var(--pc) 0 8px,transparent 8px 16px)}
+.conn.warm{background-image:repeating-linear-gradient(90deg,#F09A62 0 8px,transparent 8px 16px)}
+.chain.lam{--pc:#7DB2F2}.chain.fast{--pc:#E5483A}
+.chain.anim .conn{animation:slide var(--dur,1s) linear infinite}
+.tele{font-family:var(--font-mono);font-size:11px;color:#9DC3CF;background:#0F2A35;border:1px solid #27424f;border-radius:999px;padding:1px 8px;white-space:nowrap}
+.flowstat{display:inline-flex;margin:8px auto 0;font-family:var(--font-mono);font-size:12px;padding:3px 12px;border-radius:999px;border:1px solid var(--line);color:var(--muted);background:var(--bg)}
+.flowstat.lam{color:var(--s2);border-color:var(--s2)}.flowstat.fast{color:var(--warn);border-color:var(--warn)}.flowstat.turb{color:var(--accent);border-color:var(--accent)}
+#flowstat:empty{display:none}
+.panel>.flowstat{display:flex;width:max-content;max-width:100%}
+.presets{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.lblp{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-right:4px}
+.chip{border:1px solid var(--line);background:var(--panel);padding:5px 11px;border-radius:999px;font-size:12.5px;color:var(--ink);transition:background .15s,border-color .15s}
+.chip:hover{border-color:var(--accent)}
+.chip.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+.tabs{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none;background:var(--bg);border:1px solid var(--line);border-radius:999px;padding:4px;margin:12px 0 10px;-webkit-overflow-scrolling:touch}
+.tabs::-webkit-scrollbar{display:none}
+.tabbtn{flex:0 0 auto;display:inline-flex;align-items:center;gap:8px;border:0;background:transparent;color:var(--muted);padding:8px 14px;border-radius:999px;font-family:var(--font-display);font-weight:600;font-size:16px;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap;transition:background .2s,color .2s}
+.tabbtn .n{font-family:var(--font-mono);font-size:11px;letter-spacing:0;opacity:.7}
+.tabbtn:hover{color:var(--ink)}
+.tabbtn.on{background:var(--accent);color:var(--accent-ink)}
+.sd{width:7px;height:7px;border-radius:50%;border:1px solid var(--muted);background:transparent;display:inline-block}
+.sd.ok{background:var(--ok);border-color:var(--ok)}
+.tabbtn.on .sd{border-color:var(--accent-ink)}.tabbtn.on .sd.ok{background:var(--accent-ink);border-color:var(--accent-ink)}
+.card{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.cardhead{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.ct{font-family:var(--font-display);font-weight:600;font-size:16px;letter-spacing:.07em;text-transform:uppercase}
+.pill{font-family:var(--font-mono);font-size:11.5px;border-radius:999px;padding:3px 10px;border:1px solid var(--line);color:var(--muted);background:var(--panel)}
+.pill.ok{color:var(--ok);border-color:var(--ok)}.pill.warn{color:var(--warn);border-color:var(--warn)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden;align-self:flex-start}
+.seg button{border:0;background:var(--panel);padding:5px 12px;font-size:12.5px;color:var(--muted)}
+.seg button.on{background:var(--accent);color:var(--accent-ink);font-weight:600}
+.tblwrap{overflow:auto;border:1px solid var(--line);border-radius:6px;max-height:270px}
+table.dt{width:100%;border-collapse:collapse;table-layout:fixed;min-width:300px;font-family:var(--font-mono);font-size:11.5px}
+.dt th:nth-child(1){width:26px}.dt th:nth-child(2),.dt th:nth-child(3){width:23%}.dt th:nth-child(4),.dt th:nth-child(5){width:22%}.dt th:nth-child(6){width:26px}
+.dt th{overflow:hidden;text-overflow:ellipsis}
+.dt th{position:sticky;top:0;background:var(--panel);text-align:left;font-weight:500;color:var(--muted);padding:6px;font-size:11px;white-space:nowrap}
+.dt td{padding:2px 3px;border-top:1px solid var(--line)}
+.dt .ix{color:var(--muted);width:24px;text-align:right;padding-right:6px}
+.dt input{width:100%;min-width:0;font:inherit;color:var(--ink);background:transparent;border:1px solid transparent;border-radius:3px;padding:4px}
+.dt input:hover{border-color:var(--line)}.dt input:focus{border-color:var(--accent);background:var(--panel)}
+.dt .ro{color:var(--muted);padding-left:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dt .rm{border:0;background:transparent;color:var(--muted);padding:2px 6px;border-radius:3px}.dt .rm:hover{color:var(--warn)}
+.btn.sm{padding:5px 11px;font-size:12.5px}
+.drop{display:flex;align-items:center;gap:10px;border:1.5px dashed var(--line);border-radius:8px;padding:12px;color:var(--muted);font-size:13px;cursor:pointer;transition:border-color .15s,background .15s,color .15s}
+.drop:hover,.drop.over,.drop:focus-visible{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 8%,var(--bg));color:var(--ink)}
+.drop svg{flex:0 0 auto;width:26px;height:26px}
+.drop b{color:var(--ink);font-weight:600}
+.xrow{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);gap:12px;align-items:end}
+.xrow input{font:inherit;font-family:var(--font-mono);font-size:14px;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:7px 8px;width:100%;min-width:0}
+.tx{border-left:3px solid var(--accent);padding:2px 0 2px 10px;min-width:0}
+.tx .l{display:block;font-size:12px;color:var(--muted)}
+.tx .v{font-family:var(--font-mono);font-size:18px;font-variant-numeric:tabular-nums}
+.btngrid{display:grid;grid-template-columns:1.35fr 1fr;gap:8px}
+.btngrid .btn{text-align:center;padding:9px 8px;line-height:1.25}
+svg.nn text{font-size:11px}
+@media (max-width:420px){.xrow{grid-template-columns:minmax(0,1fr)}.tabbtn{padding:8px 12px;font-size:15px}}
+@media (prefers-reduced-motion:reduce){.mod:not([hidden]),.tabp:not([hidden]){animation:none}.chain.anim .conn{animation:none}.strip button{transition:none}.strip button:hover{transform:none}}
+</style>
+
+</head>
+<body>
+<div class="wrap">
+  <header class="hero">
+    <div class="hero-text">
+      <div class="eyebrow">Process simulation + machine learning</div>
+      <h1>ChemSimulator</h1>
+      <p class="sub">AI and data-science driven chemical process platform. Physics-based unit operation models plus a Data Lab with curve fitting, a neural-network surrogate, Monte Carlo uncertainty analysis, design optimization and anomaly detection. Select a unit in the flowsheet to open its module.</p>
+      <div class="by">Designed and built by <b>Subhajit Majumder</b></div>
+      <div class="cta"><button class="theme" id="themeBtn" type="button">Theme: auto</button><a class="btn" href="#lab">Open Data Lab</a></div>
+    </div>
+    <svg class="scene" viewBox="0 0 400 400" role="img" aria-label="Illustration of a distillation column with reboiler, condenser drum and pump">
+      <defs>
+        <linearGradient id="steel" x1="0" x2="1"><stop offset="0" stop-color="#6c7c88"/><stop offset=".3" stop-color="#e8eef2"/><stop offset=".55" stop-color="#b4c1ca"/><stop offset="1" stop-color="#55646f"/></linearGradient>
+        <linearGradient id="steelV" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#d9e2e8"/><stop offset="1" stop-color="#6b7a85"/></linearGradient>
+        <radialGradient id="glow" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#2fd0c6" stop-opacity=".35"/><stop offset="1" stop-color="#2fd0c6" stop-opacity="0"/></radialGradient>
+        <linearGradient id="liq" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#7cc4ff"/><stop offset="1" stop-color="#2a74d6"/></linearGradient>
+      </defs>
+      <circle cx="200" cy="190" r="170" fill="url(#glow)"/>
+      <ellipse cx="200" cy="372" rx="170" ry="16" fill="#05090d"/>
+      <rect x="70" y="352" width="260" height="14" rx="3" fill="#6a7882"/>
+      <!-- column -->
+      <rect x="146" y="48" width="108" height="300" rx="40" fill="url(#steel)"/>
+      <g fill="#8a98a2"><rect x="138" y="118" width="124" height="7" rx="3"/><rect x="138" y="190" width="124" height="7" rx="3"/><rect x="138" y="262" width="124" height="7" rx="3"/></g>
+      <g fill="#f4f8fa" opacity=".8"><circle cx="164" cy="90" r="2.5"/><circle cx="236" cy="90" r="2.5"/><circle cx="164" cy="156" r="2.5"/><circle cx="236" cy="156" r="2.5"/><circle cx="164" cy="228" r="2.5"/><circle cx="236" cy="228" r="2.5"/></g>
+      <circle cx="200" cy="304" r="13" fill="#0e2a6b" stroke="#4f8cff" stroke-width="3"/><circle cx="200" cy="304" r="4" fill="#cfe2ff"/>
+      <!-- ladder -->
+      <rect x="262" y="80" width="14" height="268" fill="#7b8993"/>
+      <g stroke="#4c5a64" stroke-width="2"><path d="M262 100h14M262 120h14M262 140h14M262 160h14M262 180h14M262 200h14M262 220h14M262 240h14M262 260h14M262 280h14M262 300h14M262 320h14"/></g>
+      <!-- top vapour line to condenser drum -->
+      <path d="M200 48V26H262" fill="none" stroke="#9aa8b2" stroke-width="7"/>
+      <path d="M262 26H318V150" fill="none" stroke="#f0a04b" stroke-width="5" stroke-dasharray="9 7" class="flowline"/>
+      <circle cx="286" cy="26" r="8" fill="#e5483a"/>
+      <!-- reboiler -->
+      <g fill="none" stroke="#9aa8b2" stroke-width="7"><path d="M146 200H92V282H112"/></g>
+      <rect x="62" y="296" width="14" height="40" fill="#6d7b86"/><rect x="108" y="296" width="14" height="40" fill="#6d7b86"/>
+      <g stroke="#9bb0bd" stroke-width="3"><path d="M72 300v28M82 300v28M92 300v28M102 300v28M112 300v28"/></g>
+      <path d="M122 316H146" stroke="#f0a04b" stroke-width="5" stroke-dasharray="9 7" class="flowline"/>
+      <circle cx="112" cy="282" r="8" fill="#e5483a"/>
+      <!-- condenser drum -->
+      <rect x="296" y="150" width="62" height="100" rx="26" fill="url(#steel)"/>
+      <rect x="302" y="206" width="50" height="34" rx="14" fill="url(#liq)"/>
+      <path d="M327 150V134H352M327 250V270H352" fill="none" stroke="#9aa8b2" stroke-width="5"/>
+      <!-- pump -->
+      <g transform="translate(258 322)"><circle cx="20" cy="0" r="18" fill="#2a74d6"/><circle cx="20" cy="0" r="6" fill="none" stroke="#cfe2ff" stroke-width="3"/><rect x="36" y="-12" width="34" height="24" rx="4" fill="#1d58b0"/><path d="M42 -12v24M50 -12v24M58 -12v24M66 -12v24" stroke="#7cc4ff" stroke-width="2"/></g>
+    </svg>
+  </header>
+
+  <section class="panel" aria-label="Process flowsheet">
+    <div class="flowhead">
+      <h2>Flowsheet</h2>
+      <label class="tog"><input type="checkbox" id="animToggle" checked> Animate flow</label>
+    </div>
+    <div class="presets" id="presetbar" role="group" aria-label="Load process preset"><span class="lblp">Load process preset</span>
+      <button type="button" class="chip" data-pre="cool">Cooling water loop</button>
+      <button type="button" class="chip" data-pre="crude">Viscous crude transfer</button>
+      <button type="button" class="chip" data-pre="solv">High-velocity solvents</button>
+    </div>
+    <p class="hint" id="preset-note">Presets fill the Pipe flow inputs and update every module, the flowsheet and the Data Lab.</p>
+    <div class="chainbox">
+    <div class="chain anim" id="flow">
+      <div class="eq static"><svg viewBox="0 0 80 64" aria-hidden="true"><rect x="16" y="8" width="48" height="48" rx="14" fill="url(#steel)"/><rect x="21" y="34" width="38" height="18" rx="8" fill="url(#liq)"/></svg><span>Feed</span><small class="tele" id="tl-feed">Q -</small></div>
+      <i class="conn"></i>
+      <button type="button" class="eq unit" data-m="pipe"><svg viewBox="0 0 80 64" aria-hidden="true"><path d="M8 18h10v28H8M72 18H62v28h10" fill="none" stroke="#9db0bc" stroke-width="4"/><rect x="22" y="26" width="36" height="12" fill="url(#steelV)"/></svg><span>Pipe</span><small class="tele" id="tl-pipe">ΔP -</small></button>
+      <i class="conn"></i>
+      <div class="eq static"><svg viewBox="0 0 80 64" aria-hidden="true"><circle cx="30" cy="30" r="17" fill="#2a74d6"/><circle cx="30" cy="30" r="6" fill="none" stroke="#cfe2ff" stroke-width="3"/><rect x="45" y="19" width="28" height="22" rx="3" fill="#1d58b0"/><path d="M50 19v22M56 19v22M62 19v22M68 19v22" stroke="#7cc4ff" stroke-width="2"/><rect x="12" y="50" width="62" height="5" rx="2" fill="#6a7882"/></svg><span>Pump</span><small class="tele" id="tl-pump">Head -</small></div>
+      <i class="conn warm"></i>
+      <button type="button" class="eq unit" data-m="hx"><svg viewBox="0 0 80 64" aria-hidden="true"><path d="M6 32h14M60 32h14" stroke="#f0a04b" stroke-width="4"/><rect x="20" y="16" width="40" height="32" rx="6" fill="url(#steel)"/><path d="M28 20v24M36 20v24M44 20v24M52 20v24" stroke="#5f6f7a" stroke-width="2"/><circle cx="62" cy="14" r="4" fill="#e5483a"/></svg><span>Exchanger</span><small class="tele" id="tl-hx">A -</small></button>
+      <i class="conn warm"></i>
+      <button type="button" class="eq unit" data-m="mix"><svg viewBox="0 0 80 64" aria-hidden="true"><path d="M12 10l24 18M68 10L44 28M40 28v26" fill="none" stroke="#9db0bc" stroke-width="5"/><circle cx="40" cy="30" r="12" fill="url(#steel)"/><path d="M34 30h12M40 24v12" stroke="#4c5a64" stroke-width="2.5"/></svg><span>Mixer</span><small class="tele" id="tl-mix">x_A -</small></button>
+      <i class="conn"></i>
+      <button type="button" class="eq unit" data-m="rx"><svg viewBox="0 0 80 64" aria-hidden="true"><path d="M40 4v8" stroke="#9db0bc" stroke-width="4"/><rect x="24" y="12" width="32" height="38" rx="14" fill="url(#steel)"/><path d="M40 20v22" stroke="#4c5a64" stroke-width="3"/><path d="M31 40h18" stroke="#4c5a64" stroke-width="3"/><path d="M28 52l-4 8M52 52l4 8" stroke="#6a7882" stroke-width="4"/></svg><span>Reactor</span><small class="tele" id="tl-rx">V -</small></button>
+      <i class="conn"></i>
+      <div class="eq static"><svg viewBox="0 0 80 64" aria-hidden="true"><rect x="12" y="14" width="56" height="34" rx="14" fill="url(#steel)"/><rect x="18" y="30" width="44" height="14" rx="6" fill="url(#liq)"/><rect x="8" y="52" width="64" height="5" rx="2" fill="#6a7882"/></svg><span>Product</span><small class="tele" id="tl-prod">X -</small></div>
+    </div>
+    </div>
+    <div class="flowstat" id="flowstat"></div>
+    <p class="note">Feed → Pipe → Pump → Exchanger → Mixer → Reactor → Product. Select a highlighted unit to open its module. Pipe colour: blue laminar, teal turbulent, red above 4 m/s. Flow speed follows the pipe velocity. The flow animation is a teaching schematic, not CFD or a plant model.</p>
+  </section>
+
+  <section class="strip" aria-label="Live results">
+    <button type="button" data-m="pipe"><span class="l">Pipe pressure drop</span><span class="v" id="d-pipe">-</span><span class="u">kPa</span></button>
+    <button type="button" data-m="hx"><span class="l">Exchanger area</span><span class="v" id="d-hx">-</span><span class="u">m² (counter-current)</span></button>
+    <button type="button" data-m="rx"><span class="l">CSTR volume</span><span class="v" id="d-rx">-</span><span class="u">L for target conversion</span></button>
+    <button type="button" data-m="mix"><span class="l">Outlet fraction of A</span><span class="v" id="d-mix">-</span><span class="u">mass fraction</span></button>
+  </section>
+
+  <!-- PIPE -->
+  <section class="panel mod" id="m-pipe">
+    <h2>Pipe flow</h2>
+    <p class="desc">Darcy–Weisbach pressure drop. Friction factor from 64/Re when laminar and from Swamee–Jain when turbulent.</p>
+    <div class="modgrid">
+      <div class="fields">
+        <label>Flow rate (m³/h)<input id="p-q" type="number" step="any" value="30"></label>
+        <label>Inner diameter (mm)<input id="p-d" type="number" step="any" value="80"></label>
+        <label>Length (m)<input id="p-l" type="number" step="any" value="120"></label>
+        <label>Roughness (mm)<input id="p-e" type="number" step="any" value="0.045"></label>
+        <label>Density (kg/m³)<input id="p-rho" type="number" step="any" value="998"></label>
+        <label>Viscosity (mPa·s)<input id="p-mu" type="number" step="any" value="1.0"></label>
+      </div>
+      <div>
+        <p class="msg" id="p-msg"></p>
+        <div class="res" id="p-res"></div>
+        <div class="chartbox"><svg class="chart" id="p-chart"></svg></div>
+        <div class="readout" id="p-ro">Hover or touch the curve for values.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- HX -->
+  <section class="panel mod" id="m-hx" hidden>
+    <h2>Heat exchanger</h2>
+    <p class="desc">Log-mean temperature difference method. Required area A = Q / (U · LMTD), compared for counter-current and parallel flow.</p>
+    <div class="modgrid">
+      <div class="fields">
+        <label>Hot in (°C)<input id="h-thi" type="number" step="any" value="150"></label>
+        <label>Hot out (°C)<input id="h-tho" type="number" step="any" value="90"></label>
+        <label>Cold in (°C)<input id="h-tci" type="number" step="any" value="30"></label>
+        <label>Cold out (°C)<input id="h-tco" type="number" step="any" value="70"></label>
+        <label>Duty Q (kW)<input id="h-q" type="number" step="any" value="500"></label>
+        <label>U (W/m²·K)<input id="h-u" type="number" step="any" value="600"></label>
+      </div>
+      <div>
+        <p class="msg" id="h-msg"></p>
+        <div class="res" id="h-res"></div>
+        <div class="chartbox"><svg class="chart" id="h-chart"></svg></div>
+        <div class="legend"><span><i style="background:var(--accent)"></i>Counter-current</span><span><i style="background:var(--s2)"></i>Parallel</span></div>
+        <div class="readout" id="h-ro">Hover or touch the curve for values.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- REACTOR -->
+  <section class="panel mod" id="m-rx" hidden>
+    <h2>Reactor sizing</h2>
+    <p class="desc">Ideal reactors with first-order kinetics, A → products, constant density. Volume needed for a target conversion X.</p>
+    <div class="modgrid">
+      <div class="fields">
+        <label>Rate constant k (1/min)<input id="r-k" type="number" step="any" value="0.25"></label>
+        <label>Volumetric flow (L/min)<input id="r-v0" type="number" step="any" value="40"></label>
+        <label>Inlet C<sub>A0</sub> (mol/L)<input id="r-ca0" type="number" step="any" value="2"></label>
+        <label>Target conversion X<input id="r-x" type="number" step="any" min="0" max="0.99" value="0.8"></label>
+      </div>
+      <div>
+        <p class="msg" id="r-msg"></p>
+        <div class="res" id="r-res"></div>
+        <div class="chartbox"><svg class="chart" id="r-chart"></svg></div>
+        <div class="legend"><span><i style="background:var(--accent)"></i>PFR</span><span><i style="background:var(--s2)"></i>CSTR</span></div>
+        <div class="readout" id="r-ro">Hover or touch the curve for values.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- MIXER -->
+  <section class="panel mod" id="m-mix" hidden>
+    <h2>Mixer balance</h2>
+    <p class="desc">Steady-state total and component balance for three feeds into one outlet. Fractions are mass fraction of component A.</p>
+    <div class="modgrid">
+      <div class="fields">
+        <label>Feed 1 flow (kg/h)<input id="x-f1" type="number" step="any" value="500"></label>
+        <label>Feed 1 x<sub>A</sub><input id="x-x1" type="number" step="any" value="0.9"></label>
+        <label>Feed 2 flow (kg/h)<input id="x-f2" type="number" step="any" value="300"></label>
+        <label>Feed 2 x<sub>A</sub><input id="x-x2" type="number" step="any" value="0.4"></label>
+        <label>Feed 3 flow (kg/h)<input id="x-f3" type="number" step="any" value="200"></label>
+        <label>Feed 3 x<sub>A</sub><input id="x-x3" type="number" step="any" value="0.05"></label>
+      </div>
+      <div>
+        <p class="msg" id="x-msg"></p>
+        <div class="res" id="x-res"></div>
+        <div class="chartbox"><svg class="chart" id="x-chart"></svg></div>
+        <div class="readout" id="x-ro">Hover or touch the curve for values.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" id="lab" aria-label="Data Lab">
+    <div class="flowhead"><h2>Data Lab</h2><button class="btn noprint" id="print-btn" type="button">Print or save as PDF report</button></div>
+    <p class="desc">Machine learning and data analysis built on the simulator. Fit kinetics to experimental data, train a neural-network surrogate, quantify uncertainty with Monte Carlo runs and optimise a design. Everything runs in your browser.</p>
+    <div class="tabs" role="tablist" id="labtabs" aria-label="Data Lab tools">
+      <button class="tabbtn on" type="button" data-t="fit" role="tab" aria-selected="true"><span class="n">01</span><span>Kinetics</span><i class="sd" id="sd-fit"></i></button>
+      <button class="tabbtn" type="button" data-t="ml" role="tab" aria-selected="false"><span class="n">02</span><span>Neural Net</span><i class="sd" id="sd-ml"></i></button>
+      <button class="tabbtn" type="button" data-t="mc" role="tab" aria-selected="false"><span class="n">03</span><span>Monte Carlo</span><i class="sd" id="sd-mc"></i></button>
+      <button class="tabbtn" type="button" data-t="opt" role="tab" aria-selected="false"><span class="n">04</span><span>Optimizer</span><i class="sd" id="sd-opt"></i></button>
+      <button class="tabbtn" type="button" data-t="anom" role="tab" aria-selected="false"><span class="n">05</span><span>Anomaly</span><i class="sd" id="sd-anom"></i></button>
+    </div>
+
+    <div class="tabp" id="t-fit">
+      <p class="desc">Regression on concentration-vs-time data. A first-order model is fitted by log-linear regression, refined by Gauss–Newton nonlinear least squares, and compared with a second-order model.</p>
+      <div class="modgrid">
+        <div class="stack">
+          <div class="card">
+            <div class="cardhead"><span class="ct">Lab data</span><span class="pill" id="kf-pill">- data points</span></div>
+            <div class="presets" id="kf-presets" role="group" aria-label="Dataset presets">
+              <button type="button" class="chip on" data-kp="first">1st-order hydrolysis</button>
+              <button type="button" class="chip" data-kp="second">2nd-order saponification</button>
+              <button type="button" class="chip" data-kp="noisy">Noisy batch run (σ 8%)</button>
+            </div>
+            <div class="seg" role="group" aria-label="Data editor view"><button type="button" class="on" data-kv="table">Table view</button><button type="button" data-kv="csv">Raw CSV</button></div>
+            <div id="kf-tableview" class="stack">
+              <div class="tblwrap"><table class="dt"><thead><tr><th>#</th><th>t (min)</th><th>C (mol/L)</th><th>Fitted</th><th>Resid.</th><th></th></tr></thead><tbody id="kf-tbody"></tbody></table></div>
+              <p class="hint" id="kf-empty" hidden>No data yet. Add rows, paste CSV or pick a preset.</p>
+              <div class="btnrow"><button class="btn sm" id="kf-add" type="button">+ Add row</button><button class="btn sm" id="kf-clear" type="button">Clear</button></div>
+            </div>
+            <div id="kf-csvview" hidden>
+              <label class="lab">CSV (time in min, concentration in mol/L)
+                <textarea id="kf-data" rows="10" spellcheck="false">t_min,C_mol_L
+0,2.02
+2,1.25
+4,0.71
+6,0.46
+8,0.262
+10,0.171
+12,0.095
+15,0.050
+20,0.0142</textarea></label>
+            </div>
+            <label class="drop" id="kf-drop" tabindex="0" role="button" aria-label="Drop a CSV or text file or click to browse">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
+              <span><b>Drop a .csv or .txt file</b> or click to browse</span>
+              <input type="file" id="kf-file" accept=".csv,.txt,text/csv,text/plain" hidden>
+            </label>
+          </div>
+          <div class="card">
+            <div class="cardhead"><span class="ct">Target and reactor link</span></div>
+            <div class="xrow">
+              <label class="lab">Target conversion X<input id="kf-x" type="number" step="any" value="0.9"></label>
+              <div class="tx"><span class="l">Required batch time t(X), first-order</span><span class="v" id="kf-tx">-</span></div>
+            </div>
+            <div class="btngrid"><button class="btn primary" id="kf-use" type="button">Send k to Reactor →</button><button class="btn" id="kf-csv" type="button">Export Fit CSV</button></div>
+          </div>
+        </div>
+        <div>
+          <p class="msg" id="kf-msg"></p>
+          <div class="res" id="kf-res"></div>
+          <div class="chartbox"><svg class="chart" id="kf-chart"></svg></div><div class="readout" id="kf-ro">Hover or touch the chart for values.</div>
+          <div class="legend"><span><i style="background:var(--accent)"></i>First-order fit</span><span><i class="dot" style="background:var(--warn)"></i>Measured</span></div>
+          <h3>Residuals</h3>
+          <div class="chartbox"><svg class="chart" id="kf-resid"></svg></div><div class="readout" id="kfr-ro">Hover or touch the chart for values.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tabp" id="t-ml" hidden>
+      <p class="desc">A small neural network (3 inputs, two hidden layers of 16 tanh units) is trained from scratch on 1,500 simulated pipe cases with sensor noise added, to predict pressure drop from flow rate, diameter and length. It learns from 80% of the cases and is scored against the clean physics on the 20% it has never seen. A linear regression trained on the same data is the baseline.</p>
+      <div class="modgrid">
+        <div class="stack">
+          <div class="fields"><label>Sensor noise σ (%)<input id="ml-noise" type="number" step="any" min="0" max="50" value="3"></label></div>
+          <p class="hint">Noise is added to the training targets only. Scores use the clean physics values.</p>
+          <div class="btnrow"><button class="btn primary" id="ml-train" type="button">Train model</button><button class="btn" id="ml-csv" type="button" disabled>Download test predictions CSV</button></div>
+          <p class="hint" id="ml-status">Not trained yet.</p>
+          <p class="msg" id="ml-warn"></p>
+          <h3>Try the trained model</h3>
+          <div class="fields">
+            <label>Flow rate (m³/h)<input id="ml-q" type="number" step="any" value="40"></label>
+            <label>Diameter (mm)<input id="ml-d" type="number" step="any" value="90"></label>
+            <label>Length (m)<input id="ml-l" type="number" step="any" value="150"></label>
+          </div>
+          <div class="res" id="ml-live"></div>
+          <p class="hint">Valid for flow velocity 0.1 to 6 m/s, using the fluid properties from the Pipe flow module at training time.</p>
+        </div>
+        <div>
+          <div class="res" id="ml-res"></div>
+          <h3>Network architecture and live forward pass</h3>
+          <div class="chartbox"><svg class="chart nn" id="nn-viz" role="img" aria-label="Diagram of the 3, 16, 16, 1 neural network"></svg></div>
+          <p class="hint" id="nn-note">Train the model to light up the network.</p>
+          <h3>Training and test loss</h3>
+          <div class="chartbox"><svg class="chart" id="ml-loss"></svg></div><div class="readout" id="mll-ro">Hover or touch the chart for values.</div><div class="legend"><span><i style="background:var(--s2)"></i>Training loss (noisy targets)</span><span><i style="background:var(--accent)"></i>Test loss (clean physics)</span></div>
+          <h3>Predicted vs actual on unseen cases</h3>
+          <div class="chartbox"><svg class="chart" id="ml-par"></svg></div><div class="readout" id="mlp-ro">Hover or touch the chart for values.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tabp" id="t-mc" hidden>
+      <p class="desc">5,000 Monte Carlo runs of the pipe model with normally distributed input uncertainty. Nominal values come from the Pipe flow module. The bars show how strongly each input drives the result.</p>
+      <div class="modgrid">
+        <div class="stack">
+          <div class="fields">
+            <label>Flow rate σ (%)<input id="mc-q" type="number" step="any" value="5"></label>
+            <label>Diameter σ (%)<input id="mc-d" type="number" step="any" value="2"></label>
+            <label>Length σ (%)<input id="mc-l" type="number" step="any" value="1"></label>
+            <label>Roughness σ (%)<input id="mc-e" type="number" step="any" value="20"></label>
+            <label>Density σ (%)<input id="mc-rho" type="number" step="any" value="1"></label>
+            <label>Viscosity σ (%)<input id="mc-mu" type="number" step="any" value="5"></label>
+          </div>
+          <h3>Input influence (correlation with ΔP)</h3>
+          <div id="mc-tor" class="tor"></div><div class="btnrow"><button class="btn" id="mc-csv" type="button">Download 5,000 runs CSV</button></div>
+        </div>
+        <div>
+          <p class="msg" id="mc-msg"></p>
+          <div class="res" id="mc-res"></div>
+          <div class="chartbox"><svg class="chart" id="mc-hist"></svg></div><div class="readout" id="mc-ro">Hover or touch the chart for values.</div>
+          <div class="legend"><span><i style="background:var(--warn)"></i>Nominal</span><span><i style="background:var(--s2)"></i>5th and 95th percentile</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tabp" id="t-opt" hidden>
+      <p class="desc">Finds the pipe diameter with the lowest annual cost: annualised pipe cost rises with diameter while pumping energy falls. Flow, length and fluid come from the Pipe flow module.</p>
+      <div class="modgrid">
+        <div class="stack">
+          <div class="fields">
+            <label>Currency<select id="op-cur"><option value="usd">USD ($)</option><option value="inr">INR (₹)</option></select></label>
+            <label>Exchange rate (₹ per $)<input id="op-fx" type="number" step="any" value="85"></label>
+            <label>Pipe cost a (<span class="cur">$</span>/m at 1 mm^1.4)<input id="op-a" type="number" step="any" value="0.35"></label>
+            <label>Annualisation factor (1/yr)<input id="op-ann" type="number" step="any" value="0.2"></label>
+            <label>Pump efficiency<input id="op-eta" type="number" step="any" value="0.65"></label>
+            <label>Energy price (<span class="cur">$</span>/kWh)<input id="op-price" type="number" step="any" value="0.10"></label>
+            <label>Operating hours (h/yr)<input id="op-hrs" type="number" step="any" value="8000"></label>
+          </div>
+          <p class="hint">Pipe cost per metre = a × D^1.4 with D in mm. The exchange rate is an assumption you can edit; it is used to convert the cost inputs when you switch currency.</p>
+          <div class="btnrow"><button class="btn primary" id="op-use" type="button">Apply standard size to Pipe</button></div>
+          <p class="hint" id="op-ok"></p>
+        </div>
+        <div>
+          <p class="msg" id="op-msg"></p>
+          <div class="res" id="op-res"></div>
+          <div class="chartbox"><svg class="chart" id="op-chart"></svg></div><div class="readout" id="op-ro">Hover or touch the chart for values.</div>
+          <div class="legend"><span><i style="background:var(--s2)"></i>Pipe (annualised)</span><span><i style="background:var(--warn)"></i>Pumping energy</span><span><i style="background:var(--accent)"></i>Total</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tabp" id="t-anom" hidden>
+      <p class="desc">Simulates 200 sequential plant readings of flow and pressure drop, with a fault that begins part-way through. The model predicts the healthy pressure drop for each flow, the residual is turned into a z-score using the first 60 healthy readings, and readings with |z| above 2.5 are flagged. Results are scored against the known fault labels.</p>
+      <div class="modgrid">
+        <div class="stack">
+          <div class="fields">
+            <label>Fault type<select id="an-type"><option value="foul">Gradual fouling</option><option value="block">Sudden valve blockage</option></select></label>
+            <label>Predictor<select id="an-model"><option value="nn">Neural surrogate</option><option value="phys">Physics model</option></select></label>
+            <label>Fault starts at reading<input id="an-on" type="number" step="1" min="70" max="190" value="120"></label>
+            <label>Fault size (%)<input id="an-sev" type="number" step="any" value="25"></label>
+            <label>Sensor noise σ (%)<input id="an-noise" type="number" step="any" value="3"></label>
+          </div>
+          <div class="btnrow"><button class="btn" id="an-new" type="button">New random run</button></div>
+          <p class="hint">Flow, diameter, length and fluid come from the Pipe flow module. Fouling grows linearly from the start reading to the full fault size by reading 200. A blockage jumps to the full size at once. The z-score is based on the relative residual (measured minus predicted, divided by predicted), because the noise scales with the signal.</p>
+        </div>
+        <div>
+          <p class="msg" id="an-msg"></p>
+          <div class="res" id="an-res"></div>
+          <h3>Residual control chart (z-score)</h3>
+          <div class="chartbox"><svg class="chart" id="an-chart"></svg></div>
+          <div class="readout" id="an-ro">Hover or touch the chart for values.</div>
+          <div class="legend"><span><i style="background:var(--s2)"></i>z-score</span><span><i style="background:var(--warn)"></i>±2.5σ limit</span><span><i class="dot" style="background:var(--warn)"></i>Flagged reading</span><span><i style="background:var(--ok)"></i>Fault start</span></div>
+          <h3>Measured vs predicted pressure drop</h3>
+          <div class="chartbox"><svg class="chart" id="an-dp"></svg></div>
+          <div class="readout" id="an-dpro">Hover or touch the chart for values.</div>
+          <div class="legend"><span><i style="background:var(--warn)"></i>Measured</span><span><i style="background:var(--accent)"></i>Predicted healthy</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <b>ChemSimulator</b> is an academic project by <b>Subhajit Majumder</b>. Data Lab: nonlinear least-squares kinetics fitting, an in-browser neural-network surrogate (Adam optimiser) with a linear baseline, Monte Carlo simulation, techno-economic optimisation, and anomaly and fouling detection. Methods: Darcy–Weisbach with Swamee–Jain, LMTD, ideal CSTR and PFR first-order kinetics, and steady-state component balance. For learning and quick estimates, not for final design.
+  </footer>
+</div>
+
+<script>
+(function(){
+  var $=function(id){return document.getElementById(id)};
+  var num=function(id){return parseFloat($(id).value)};
+  function fmt(x,d){if(!isFinite(x))return "-";var a=Math.abs(x);if(a!==0&&(a>=1e6||a<1e-3))return x.toExponential(2);return x.toLocaleString("en-US",{maximumFractionDigits:d==null?2:d,minimumFractionDigits:0})}
+  function niceCeil(v){if(v<=0)return 1;var p=Math.pow(10,Math.floor(Math.log10(v))),f=v/p;var n=f<=1?1:f<=2?2:f<=2.5?2.5:f<=5?5:10;return n*p}
+  function resBox(el,items){el.innerHTML=items.map(function(i){return '<div><span class="l">'+i[0]+'</span><span class="v'+(i[2]?' bad':'')+'">'+i[1]+'</span></div>'}).join("")}
+
+  /* line chart with hover readout */
+  function chart(svg,ro,o){
+    var W=640,H=300,m={l:54,r:14,t:12,b:40},pw=W-m.l-m.r,ph=H-m.t-m.b;
+    var xs=[],ys=[];o.series.forEach(function(s){s.pts.forEach(function(p){xs.push(p[0]);ys.push(p[1])})});
+    if(!xs.length){svg.innerHTML="";return}
+    var x0=Math.min.apply(null,xs),x1=Math.max.apply(null,xs),y1=niceCeil(Math.max.apply(null,ys)*1.05);
+    var X=function(v){return m.l+(v-x0)/(x1-x0||1)*pw},Y=function(v){return m.t+ph-v/y1*ph};
+    var g="",i,t;
+    for(i=0;i<=4;i++){t=y1*i/4;g+='<line x1="'+m.l+'" x2="'+(W-m.r)+'" y1="'+Y(t)+'" y2="'+Y(t)+'" stroke="var(--line)" stroke-width="1"/><text x="'+(m.l-6)+'" y="'+(Y(t)+4)+'" text-anchor="end">'+fmt(t,3)+'</text>'}
+    for(i=0;i<=4;i++){t=x0+(x1-x0)*i/4;g+='<text x="'+X(t)+'" y="'+(H-m.b+16)+'" text-anchor="middle">'+fmt(t,3)+'</text>'}
+    g+='<line x1="'+m.l+'" x2="'+(W-m.r)+'" y1="'+Y(0)+'" y2="'+Y(0)+'" stroke="var(--muted)"/>';
+    g+='<text x="'+(m.l+pw/2)+'" y="'+(H-6)+'" text-anchor="middle">'+o.xl+'</text>';
+    g+='<text transform="translate(12 '+(m.t+ph/2)+') rotate(-90)" text-anchor="middle">'+o.yl+'</text>';
+    o.series.forEach(function(s){g+='<path d="'+s.pts.map(function(p,k){return(k?"L":"M")+X(p[0]).toFixed(1)+" "+Y(p[1]).toFixed(1)}).join("")+'" fill="none" stroke="'+s.color+'" stroke-width="2.5" stroke-linejoin="round"/>'});
+    if(o.mark){g+='<circle cx="'+X(o.mark[0])+'" cy="'+Y(o.mark[1])+'" r="5.5" fill="var(--bg)" stroke="var(--warn)" stroke-width="2.5"/>'}
+    g+='<line id="cur" y1="'+m.t+'" y2="'+Y(0)+'" stroke="var(--muted)" stroke-dasharray="3 3" opacity="0"/>';
+    g+='<rect x="'+m.l+'" y="'+m.t+'" width="'+pw+'" height="'+ph+'" fill="transparent" id="hit"/>';
+    svg.setAttribute("viewBox","0 0 "+W+" "+H);svg.innerHTML=g;
+    var hit=svg.querySelector("#hit"),cur=svg.querySelector("#cur");
+    function move(e){
+      var r=svg.getBoundingClientRect(),px=(e.clientX-r.left)/r.width*W,xv=x0+(px-m.l)/pw*(x1-x0);
+      xv=Math.max(x0,Math.min(x1,xv));cur.setAttribute("x1",X(xv));cur.setAttribute("x2",X(xv));cur.setAttribute("opacity","1");
+      ro.textContent=o.xn+" = "+fmt(xv,3)+"   "+o.series.map(function(s){var b=s.pts[0],bd=1e99;s.pts.forEach(function(p){var d=Math.abs(p[0]-xv);if(d<bd){bd=d;b=p}});return s.name+" = "+fmt(b[1],3)+" "+o.yu}).join("   ");
+    }
+    hit.addEventListener("pointermove",move);hit.addEventListener("pointerdown",move);
+    hit.addEventListener("pointerleave",function(){cur.setAttribute("opacity","0")});
+  }
+  function range(a,b,n){var r=[];for(var i=0;i<=n;i++)r.push(a+(b-a)*i/n);return r}
+
+  /* ---- Pipe ---- */
+  var TELE={"d-pipe":["tl-pipe",function(v){return"ΔP "+fmt(v,1)+" kPa"},"ΔP -"],"d-hx":["tl-hx",function(v){return"A "+fmt(v,1)+" m²"},"A -"],"d-rx":["tl-rx",function(v){return"V "+fmt(v,0)+" L"},"V -"],"d-mix":["tl-mix",function(v){return"x_A "+fmt(v,3)},"x_A -"]};
+  function kpi(id,val,d){
+    var el=$(id),t=TELE[id],ok=isFinite(val);
+    if(t)$(t[0]).textContent=ok?t[1](val):t[2];
+    if(id==="d-rx")$("tl-prod").textContent=ok?"X "+fmt(num("r-x"),2):"X -";
+    clearTimeout(el._to);if(el._raf)cancelAnimationFrame(el._raf);
+    if(!ok){el.textContent="-";el._v=NaN;return}
+    var from=isFinite(el._v)?el._v:0,reduce=window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    el._v=val;
+    if(reduce||Math.abs(val-from)<1e-9){el.textContent=fmt(val,d);return}
+    var t0=null;
+    var step=function(ts){if(t0===null)t0=ts;var k=Math.min(1,(ts-t0)/380),e=1-Math.pow(1-k,3);el.textContent=fmt(from+(val-from)*e,d);if(k<1)el._raf=requestAnimationFrame(step)};
+    el._raf=requestAnimationFrame(step);
+    el._to=setTimeout(function(){el.textContent=fmt(val,d)},460);
+  }
+  function flowVis(v,Re){
+    var fl=$("flow"),st=$("flowstat"),dur=Math.max(0.25,Math.min(3,1.6/Math.max(v,0.05)));
+    fl.style.setProperty("--dur",dur.toFixed(2)+"s");
+    var lam=Re<2300,fast=v>4;
+    fl.classList.toggle("lam",lam);fl.classList.toggle("fast",fast&&!lam);
+    st.className="flowstat "+(fast?"fast":lam?"lam":"turb");
+    st.textContent="Pipe velocity "+fmt(v,2)+" m/s · "+(lam?"laminar":Re<4000?"transitional":"turbulent")+" · Re "+fmt(Re,0)+(fast?" · above the 4 m/s guide limit":"");
+  }
+  function pipeCalc(q,dmm,L,emm,rho,mu){
+    var D=dmm/1000,A=Math.PI*D*D/4,v=q/3600/A,Re=rho*v*D/(mu/1000),f;
+    if(Re<2300)f=64/Re;else{var a=Math.log10(emm/1000/(3.7*D)+5.74/Math.pow(Re,0.9));f=0.25/(a*a)}
+    return{v:v,Re:Re,f:f,dp:f*L/D*rho*v*v/2/1000}
+  }
+  function pipe(){mlStale();
+    var q=num("p-q"),d=num("p-d"),L=num("p-l"),e=num("p-e"),rho=num("p-rho"),mu=num("p-mu");
+    var ok=[q,d,L,rho,mu].every(function(x){return x>0})&&e>=0;
+    $("p-msg").textContent=ok?"":"Enter positive values for every field (roughness may be zero).";
+    if(!ok){kpi("d-pipe",NaN);return}
+    var r=pipeCalc(q,d,L,e,rho,mu),reg=r.Re<2300?"Laminar":r.Re<4000?"Transitional":"Turbulent";
+    $("p-msg").textContent=r.Re>=2300&&r.Re<4000?"Re is in the transitional range, so the friction factor is uncertain.":"";
+    resBox($("p-res"),[["Velocity (m/s)",fmt(r.v,3)],["Reynolds number",fmt(r.Re,0)],["Regime",reg],["Friction factor",fmt(r.f,4)],["Pressure drop (kPa)",fmt(r.dp,2)],["Head loss (m)",fmt(r.dp*1000/(rho*9.80665),2)]]);
+    kpi("d-pipe",r.dp,1);flowVis(r.v,r.Re);$("tl-feed").textContent="Q "+fmt(q,0)+" m³/h";$("tl-pump").textContent="Head "+fmt(r.dp*1000/(rho*9.80665),1)+" m";
+    var pts=range(0.1*q,2*q,40).map(function(x){return[x,pipeCalc(x,d,L,e,rho,mu).dp]});
+    chart($("p-chart"),$("p-ro"),{xl:"Flow rate (m³/h)",yl:"ΔP (kPa)",xn:"Q",yu:"kPa",series:[{name:"ΔP",color:"var(--accent)",pts:pts}],mark:[q,r.dp]});
+  }
+
+  /* ---- Heat exchanger ---- */
+  function lmtd(a,b){return Math.abs(a-b)<1e-9?a:(a-b)/Math.log(a/b)}
+  function hx(){
+    var thi=num("h-thi"),tho=num("h-tho"),tci=num("h-tci"),tco=num("h-tco"),Q=num("h-q"),U=num("h-u");
+    var msg="",items=[];
+    if(![thi,tho,tci,tco,Q,U].every(isFinite)||Q<=0||U<=0){$("h-msg").textContent="Enter numbers, with positive duty and U.";kpi("d-hx",NaN);return}
+    if(!(thi>tho&&tco>tci)){$("h-msg").textContent="Hot stream must cool down and cold stream must heat up.";kpi("d-hx",NaN);return}
+    var c1=thi-tco,c2=tho-tci,p1=thi-tci,p2=tho-tco;
+    var cOK=c1>0&&c2>0,pOK=p1>0&&p2>0,Lc=cOK?lmtd(c1,c2):NaN,Lp=pOK?lmtd(p1,p2):NaN;
+    var Ac=cOK?Q*1000/(U*Lc):NaN,Ap=pOK?Q*1000/(U*Lp):NaN;
+    if(!cOK)msg="Temperature cross in counter-current flow: these terminal temperatures are not feasible.";
+    else if(!pOK)msg="Parallel flow is not feasible here because the outlet temperatures cross.";
+    $("h-msg").textContent=msg;
+    resBox($("h-res"),[["LMTD counter (K)",fmt(Lc,2)],["Area counter (m²)",fmt(Ac,2)],["LMTD parallel (K)",fmt(Lp,2)],["Area parallel (m²)",fmt(Ap,2),!pOK],["Hot ΔT (K)",fmt(thi-tho,1)],["Cold ΔT (K)",fmt(tco-tci,1)]]);
+    kpi("d-hx",Ac,1);
+    var us=range(0.4*U,2.5*U,40),series=[];
+    if(cOK)series.push({name:"Counter",color:"var(--accent)",pts:us.map(function(u){return[u,Q*1000/(u*Lc)]})});
+    if(pOK)series.push({name:"Parallel",color:"var(--s2)",pts:us.map(function(u){return[u,Q*1000/(u*Lp)]})});
+    chart($("h-chart"),$("h-ro"),{xl:"U (W/m²·K)",yl:"Area (m²)",xn:"U",yu:"m²",series:series,mark:cOK?[U,Ac]:null});
+  }
+
+  /* ---- Reactor ---- */
+  function rx(){
+    var k=num("r-k"),v0=num("r-v0"),ca0=num("r-ca0"),X=num("r-x");
+    if(!(k>0&&v0>0&&ca0>0)||!(X>0&&X<1)){$("r-msg").textContent="Use positive k, flow and C_A0, and a conversion between 0 and 1 (exclusive).";kpi("d-rx",NaN);return}
+    $("r-msg").textContent=X>0.99?"Conversions above 0.99 need very large volumes.":"";
+    var Vc=v0*X/(k*(1-X)),Vp=-v0*Math.log(1-X)/k;
+    resBox($("r-res"),[["CSTR volume (L)",fmt(Vc,1)],["PFR volume (L)",fmt(Vp,1)],["CSTR / PFR",fmt(Vc/Vp,2)],["CSTR residence (min)",fmt(Vc/v0,2)],["Outlet C_A (mol/L)",fmt(ca0*(1-X),3)],["Product rate (mol/min)",fmt(ca0*v0*X,1)]]);
+    kpi("d-rx",Vc,0);
+    var xs=range(0.02,0.95,46);
+    chart($("r-chart"),$("r-ro"),{xl:"Conversion X",yl:"Volume (L)",xn:"X",yu:"L",series:[
+      {name:"PFR",color:"var(--accent)",pts:xs.map(function(x){return[x,-v0*Math.log(1-x)/k]})},
+      {name:"CSTR",color:"var(--s2)",pts:xs.map(function(x){return[x,v0*x/(k*(1-x))]})}],mark:X<=0.95?[X,Vc]:null});
+  }
+
+  /* ---- Mixer ---- */
+  function mix(){
+    var F=[num("x-f1"),num("x-f2"),num("x-f3")],x=[num("x-x1"),num("x-x2"),num("x-x3")];
+    var ok=F.every(function(v){return v>=0})&&x.every(function(v){return v>=0&&v<=1})&&F.reduce(function(a,b){return a+b},0)>0;
+    $("x-msg").textContent=ok?"":"Flows must be zero or more (not all zero) and fractions between 0 and 1.";
+    if(!ok){kpi("d-mix",NaN);return}
+    var tot=F[0]+F[1]+F[2],A=F[0]*x[0]+F[1]*x[1]+F[2]*x[2],xo=A/tot;
+    resBox($("x-res"),[["Outlet flow (kg/h)",fmt(tot,1)],["Outlet x_A",fmt(xo,4)],["A in outlet (kg/h)",fmt(A,1)],["B in outlet (kg/h)",fmt(tot-A,1)],["Feed 1 share",fmt(F[0]/tot*100,1)+" %"],["Feed 3 share",fmt(F[2]/tot*100,1)+" %"]]);
+    kpi("d-mix",xo,3);
+    var top=Math.max(F[2]*2,100),pts=range(0,top,40).map(function(f3){var t=F[0]+F[1]+f3;return[f3,(F[0]*x[0]+F[1]*x[1]+f3*x[2])/t]});
+    var t0=F[0]+F[1]+F[2];
+    chart($("x-chart"),$("x-ro"),{xl:"Feed 3 flow (kg/h)",yl:"Outlet x_A",xn:"F3",yu:"",series:[{name:"x_A",color:"var(--accent)",pts:pts}],mark:[F[2],xo]});
+  }
+
+  var calc={pipe:pipe,hx:hx,rx:rx,mix:mix};
+  function show(id){
+    ["pipe","hx","rx","mix"].forEach(function(k){$("m-"+k).hidden=k!==id});
+    document.querySelectorAll(".unit,.strip button").forEach(function(n){n.classList.toggle("on",n.getAttribute("data-m")===id)});
+    calc[id]();
+  }
+  document.querySelectorAll("[data-m]").forEach(function(n){
+    n.addEventListener("click",function(){show(n.getAttribute("data-m"))});
+    n.addEventListener("keydown",function(e){if(e.key==="Enter"||e.key===" "){e.preventDefault();show(n.getAttribute("data-m"))}});
+  });
+  var cur="pipe";
+  document.querySelectorAll("[data-m]").forEach(function(n){n.addEventListener("click",function(){cur=n.getAttribute("data-m")})});
+  document.querySelectorAll(".fields input").forEach(function(i){i.addEventListener("input",function(){calc[cur]();});});
+  ["pipe","hx","rx","mix"].forEach(function(k){if(k!=="pipe")calc[k]()});
+  show("pipe");
+
+  $("animToggle").addEventListener("change",function(e){$("flow").classList.toggle("anim",e.target.checked);document.querySelectorAll('.flowline').forEach(function(l){l.style.animationPlayState=e.target.checked?'running':'paused'})});
+
+  var modes=["auto","light","dark"],mi=0;
+  $("themeBtn").addEventListener("click",function(){
+    mi=(mi+1)%3;var r=document.documentElement;
+    if(modes[mi]==="auto")r.removeAttribute("data-theme");else r.setAttribute("data-theme",modes[mi]);
+    $("themeBtn").textContent="Theme: "+modes[mi];
+  });
+  /* ================= Data Lab ================= */
+  var ext=function(a,p){var lo=Math.min.apply(null,a),hi=Math.max.apply(null,a),r=(hi-lo)||Math.abs(hi)||1;return[lo-p*r,hi+p*r]};
+  var tk=function(v){return fmt(v,3)};
+  function plot(svg,o){
+    var W=640,H=o.h||280,m={l:58,r:14,t:12,b:40},pw=W-m.l-m.r,ph=H-m.t-m.b,g="",i,t;
+    var X=function(v){return m.l+(v-o.xmin)/(o.xmax-o.xmin||1)*pw},Y=function(v){return m.t+ph-(v-o.ymin)/(o.ymax-o.ymin||1)*ph};
+    for(i=0;i<=4;i++){t=o.ymin+(o.ymax-o.ymin)*i/4;g+='<line x1="'+m.l+'" x2="'+(W-m.r)+'" y1="'+Y(t)+'" y2="'+Y(t)+'" stroke="var(--line)"/><text x="'+(m.l-6)+'" y="'+(Y(t)+4)+'" text-anchor="end">'+tk(t)+'</text>'}
+    for(i=0;i<=4;i++){t=o.xmin+(o.xmax-o.xmin)*i/4;g+='<text x="'+X(t)+'" y="'+(H-m.b+16)+'" text-anchor="middle">'+tk(t)+'</text>'}
+    if(o.ymin<0&&o.ymax>0&&!o.nozero)g+='<line x1="'+m.l+'" x2="'+(W-m.r)+'" y1="'+Y(0)+'" y2="'+Y(0)+'" stroke="var(--muted)"/>';
+    g+='<text x="'+(m.l+pw/2)+'" y="'+(H-6)+'" text-anchor="middle">'+o.xl+'</text><text transform="translate(12 '+(m.t+ph/2)+') rotate(-90)" text-anchor="middle">'+o.yl+'</text>';
+    var base=Y(Math.max(o.ymin,0));
+    (o.bars||[]).forEach(function(b){var x=X(b[0]),w=Math.max(1,X(b[1])-x-1),y=Y(b[2]);g+='<rect x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+w.toFixed(1)+'" height="'+Math.max(0,base-y).toFixed(1)+'" fill="'+(o.barColor||"var(--accent)")+'" opacity=".85"/>'});
+    (o.lines||[]).forEach(function(l){if(l.pts.length>1)g+='<path d="'+l.pts.map(function(p,k){return(k?"L":"M")+X(p[0]).toFixed(1)+" "+Y(p[1]).toFixed(1)}).join("")+'" fill="none" stroke="'+l.color+'" stroke-width="'+(l.w||2.5)+'" stroke-linejoin="round"'+(l.dash?' stroke-dasharray="'+l.dash+'"':'')+'/>'});
+    (o.vlines||[]).forEach(function(v){g+='<line x1="'+X(v.x)+'" x2="'+X(v.x)+'" y1="'+m.t+'" y2="'+(m.t+ph)+'" stroke="'+v.color+'" stroke-width="2" stroke-dasharray="5 4"/>'});
+    (o.dots||[]).forEach(function(d){d.pts.forEach(function(p){g+='<circle cx="'+X(p[0]).toFixed(1)+'" cy="'+Y(p[1]).toFixed(1)+'" r="'+(d.r||4)+'" fill="'+d.color+'" opacity="'+(d.op||1)+'"/>'})});
+    g+='<line class="cur" y1="'+m.t+'" y2="'+(m.t+ph)+'" stroke="var(--muted)" stroke-dasharray="3 3" opacity="0"/><rect class="hit" x="'+m.l+'" y="'+m.t+'" width="'+pw+'" height="'+ph+'" fill="transparent"/>';
+    svg.setAttribute("viewBox","0 0 "+W+" "+H);svg.innerHTML=g;
+    if(o.ro){
+      var cur=svg.querySelector(".cur"),hit=svg.querySelector(".hit");
+      var near=function(pts,xv){var b=pts[0],bd=1e99;pts.forEach(function(p){var d=Math.abs(p[0]-xv);if(d<bd){bd=d;b=p}});return b};
+      var mv=function(e){
+        var r=svg.getBoundingClientRect(),px=(e.clientX-r.left)/r.width*W,xv=o.xmin+(px-m.l)/pw*(o.xmax-o.xmin);
+        xv=Math.max(o.xmin,Math.min(o.xmax,xv));cur.setAttribute("x1",X(xv));cur.setAttribute("x2",X(xv));cur.setAttribute("opacity","1");
+        var parts=[(o.xn||"x")+" = "+tk(xv)];
+        (o.lines||[]).forEach(function(l){if(l.name&&l.pts.length)parts.push(l.name+" = "+tk(near(l.pts,xv)[1]))});
+        (o.dots||[]).forEach(function(d){if(d.name&&d.pts.length)parts.push(d.name+" = "+tk(near(d.pts,xv)[1]))});
+        (o.bars||[]).forEach(function(b){if(xv>=b[0]&&xv<b[1])parts.push("bin "+tk(b[0])+" to "+tk(b[1])+": "+fmt(b[2],2)+" % of runs")});
+        o.ro.textContent=parts.join("   ")};
+      hit.addEventListener("pointermove",mv);hit.addEventListener("pointerdown",mv);
+      hit.addEventListener("pointerleave",function(){cur.setAttribute("opacity","0")});
+    }
+  }
+  function rng(seed){var s=seed>>>0;return function(){s=(s+0x6D2B79F5)>>>0;var t=s;t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return((t^t>>>14)>>>0)/4294967296}}
+  function randn(r){return Math.sqrt(-2*Math.log(r()+1e-12))*Math.cos(2*Math.PI*r())}
+  function mean(a){var s=0;for(var i=0;i<a.length;i++)s+=a[i];return s/a.length}
+  function std(a){var m=mean(a),s=0;for(var i=0;i<a.length;i++)s+=(a[i]-m)*(a[i]-m);return Math.sqrt(s/(a.length-1))}
+  function corr(a,b){var ma=mean(a),mb=mean(b),sab=0,saa=0,sbb=0;for(var i=0;i<a.length;i++){var x=a[i]-ma,y=b[i]-mb;sab+=x*y;saa+=x*x;sbb+=y*y}return sab/Math.sqrt(saa*sbb||1)}
+  function pct(sorted,p){var x=p*(sorted.length-1),i=Math.floor(x),f=x-i;return sorted[i]*(1-f)+(sorted[Math.min(i+1,sorted.length-1)])*f}
+  function linreg(x,y){var n=x.length,mx=mean(x),my=mean(y),sxx=0,sxy=0,i;for(i=0;i<n;i++){sxx+=(x[i]-mx)*(x[i]-mx);sxy+=(x[i]-mx)*(y[i]-my)}
+    var m=sxy/sxx,b=my-m*mx,ssr=0,sst=0;for(i=0;i<n;i++){var e=y[i]-(m*x[i]+b);ssr+=e*e;sst+=(y[i]-my)*(y[i]-my)}
+    return{m:m,b:b,r2:1-ssr/(sst||1),se:Math.sqrt(ssr/Math.max(n-2,1)/sxx)}}
+
+  function sd(t,ok){var e=$("sd-"+t);if(e)e.classList.toggle("ok",!!ok)}
+  /* ---- 1. Kinetics fitting ---- */
+  var lastFit=null,kfRows=[],mcRows=[];
+  function parseData(text){var rows=[];text.split(/\r?\n/).forEach(function(l){var p=l.trim().split(/[,;\t ]+/).map(parseFloat);if(p.length>=2&&isFinite(p[0])&&isFinite(p[1]))rows.push([p[0],p[1]])});return rows}
+  function kfit(){
+    var d=parseData($("kf-data").value).filter(function(r){return r[1]>0});
+    var msg=$("kf-msg");lastFit=null;kfRows=[];
+    if(d.length<4){kfPill(d.length+" data point"+(d.length===1?"":"s")+" · need at least 4","warn");sd("fit",false);$("kf-tx").textContent="-";fillFit();msg.textContent="Need at least four rows of positive concentration data (time, concentration).";$("kf-res").innerHTML="";$("kf-chart").innerHTML="";$("kf-resid").innerHTML="";return}
+    msg.textContent="";
+    var t=d.map(function(r){return r[0]}),c=d.map(function(r){return r[1]}),n=t.length,i;
+    var l1=linreg(t,c.map(Math.log)),l2=linreg(t,c.map(function(v){return 1/v}));
+    var c0=Math.exp(l1.b),k=-l1.m;if(!(k>0)||!isFinite(c0)){kfPill(n+" data points · not decaying","warn");sd("fit",false);$("kf-tx").textContent="-";fillFit();msg.textContent="Concentration does not fall with time, so a decay model cannot be fitted.";return}
+    for(var it=0;it<40;it++){
+      var a11=0,a12=0,a22=0,g1=0,g2=0;
+      for(i=0;i<n;i++){var e=Math.exp(-k*t[i]),r=c[i]-c0*e,j1=e,j2=-c0*t[i]*e;a11+=j1*j1;a12+=j1*j2;a22+=j2*j2;g1+=j1*r;g2+=j2*r}
+      var det=a11*a22-a12*a12;if(Math.abs(det)<1e-18)break;
+      var d1=(a22*g1-a12*g2)/det,d2=(-a12*g1+a11*g2)/det;
+      if(!(c0+d1>0&&k+d2>0))break;c0+=d1;k+=d2;if(Math.abs(d1)+Math.abs(d2)<1e-12)break}
+    var cm=mean(c),ssr=0,sst=0,res=[];
+    for(i=0;i<n;i++){var f=c0*Math.exp(-k*t[i]);res.push(c[i]-f);ssr+=res[i]*res[i];sst+=(c[i]-cm)*(c[i]-cm)}
+    var r2=1-ssr/(sst||1),rmse=Math.sqrt(ssr/n),X=num("kf-x"),tX=(X>0&&X<1)?-Math.log(1-X)/k:NaN;
+    var verdict=l1.r2>=l2.r2?"First-order":"Second-order";
+    $("kf-msg").textContent=l2.r2>l1.r2?"The second-order model fits this data better than first-order. The reactor module assumes first-order kinetics.":"";
+    resBox($("kf-res"),[["Rate constant k (1/min)",fmt(k,4)],["k std. error (log fit)",fmt(l1.se,4)],["Initial C₀ (mol/L)",fmt(c0,3)],["R² (nonlinear fit)",fmt(r2,4)],["RMSE (mol/L)",fmt(rmse,4)],["Half-life (min)",fmt(Math.LN2/k,2)],["Time to reach X (min)",fmt(tX,2)],["Better model by R²",verdict+" ("+fmt(Math.max(l1.r2,l2.r2),3)+")"]]);
+    var tr=ext(t,0.04),curve=[];for(i=0;i<=80;i++){var tt=Math.min.apply(null,t)+(Math.max.apply(null,t)-Math.min.apply(null,t))*i/80;curve.push([tt,c0*Math.exp(-k*tt)])}
+    plot($("kf-chart"),{ro:$("kf-ro"),xn:"t",xmin:tr[0],xmax:tr[1],ymin:0,ymax:Math.max.apply(null,c)*1.08,xl:"Time (min)",yl:"C (mol/L)",lines:[{name:"fit",pts:curve,color:"var(--accent)"}],dots:[{name:"measured",pts:t.map(function(v,j){return[v,c[j]]}),color:"var(--warn)"}]});
+    var mr=Math.max.apply(null,res.map(Math.abs))*1.3||1;
+    plot($("kf-resid"),{ro:$("kfr-ro"),xn:"t",h:200,xmin:tr[0],xmax:tr[1],ymin:-mr,ymax:mr,xl:"Time (min)",yl:"Residual (mol/L)",dots:[{name:"residual",pts:t.map(function(v,j){return[v,res[j]]}),color:"var(--s2)"}]});
+    lastFit={k:k,c0:c0};kfRows=t.map(function(v,j){return[v,c[j],(c0*Math.exp(-k*v)).toPrecision(6),res[j].toPrecision(4)]});
+    kfPill(n+" data points · Valid"+(l2.r2>l1.r2?" · 2nd-order fits better":""),l2.r2>l1.r2?"warn":"ok");sd("fit",true);fillFit();$("kf-tx").textContent=isFinite(tX)?fmt(tX,2)+" min":"-";
+  }
+  var KP={
+    first:"t_min,C_mol_L\n0,2.02\n2,1.25\n4,0.71\n6,0.46\n8,0.262\n10,0.171\n12,0.095\n15,0.050\n20,0.0142",
+    second:"t_min,C_mol_L\n0,0.500\n1,0.355\n2,0.280\n4,0.191\n6,0.148\n8,0.118\n12,0.085\n16,0.065\n20,0.054\n30,0.037"};
+  function genNoisy(){var r=rng(11),rows=["t_min,C_mol_L"];for(var t=0;t<=24;t+=2){var c=1.5*Math.exp(-0.18*t)*(1+0.08*randn(r));rows.push(t+","+(+c.toPrecision(3)))}return rows.join("\n")}
+  function kfPill(t,cls){var e=$("kf-pill");e.textContent=t;e.className="pill "+cls}
+  function setPreset(n){document.querySelectorAll("#kf-presets .chip").forEach(function(b){b.classList.toggle("on",b.getAttribute("data-kp")===n)})}
+  function rowHtml(i,t,c){return'<tr><td class="ix">'+(i+1)+'</td><td><input inputmode="decimal" aria-label="Time, row '+(i+1)+'" value="'+t+'"></td><td><input inputmode="decimal" aria-label="Concentration, row '+(i+1)+'" value="'+c+'"></td><td class="ro fit">-</td><td class="ro rs">-</td><td><button type="button" class="rm" aria-label="Delete row '+(i+1)+'">✕</button></td></tr>'}
+  function renumber(){var trs=$("kf-tbody").rows;for(var i=0;i<trs.length;i++)trs[i].cells[0].textContent=i+1;$("kf-empty").hidden=trs.length>0}
+  function renderTable(){var rows=parseData($("kf-data").value);$("kf-tbody").innerHTML=rows.map(function(r,i){return rowHtml(i,r[0],r[1])}).join("");renumber()}
+  function tableToText(){
+    var lines=["t_min,C_mol_L"],trs=$("kf-tbody").rows;
+    for(var i=0;i<trs.length;i++){var inp=trs[i].querySelectorAll("input"),t=parseFloat(inp[0].value),c=parseFloat(inp[1].value);if(isFinite(t)&&isFinite(c))lines.push(t+","+c)}
+    $("kf-data").value=lines.join("\n");setPreset(null);kfit();
+  }
+  function fillFit(){
+    var trs=$("kf-tbody").rows,j=0;
+    for(var i=0;i<trs.length;i++){
+      var inp=trs[i].querySelectorAll("input"),t=parseFloat(inp[0].value),c=parseFloat(inp[1].value),f=trs[i].querySelector(".fit"),rs=trs[i].querySelector(".rs");
+      if(isFinite(t)&&isFinite(c)&&c>0){if(kfRows[j]){f.textContent=fmt(+kfRows[j][2],3);rs.textContent=fmt(+kfRows[j][3],3)}else{f.textContent="-";rs.textContent="-"}j++}
+      else{f.textContent="-";rs.textContent="-"}
+    }
+  }
+  function setKText(txt,preset){$("kf-data").value=txt;setPreset(preset||null);renderTable();kfit()}
+  $("kf-data").addEventListener("input",function(){setPreset(null);renderTable();kfit()});
+  $("kf-x").addEventListener("input",kfit);
+  $("kf-tbody").addEventListener("input",tableToText);
+  $("kf-tbody").addEventListener("click",function(e){var b=e.target.closest(".rm");if(!b)return;b.closest("tr").remove();renumber();tableToText()});
+  $("kf-add").addEventListener("click",function(){var tb=$("kf-tbody");tb.insertAdjacentHTML("beforeend",rowHtml(tb.rows.length,"",""));renumber();tb.rows[tb.rows.length-1].querySelector("input").focus()});
+  $("kf-clear").addEventListener("click",function(){$("kf-data").value="t_min,C_mol_L\n";setPreset(null);renderTable();kfit()});
+  document.querySelectorAll("#kf-presets .chip").forEach(function(b){b.addEventListener("click",function(){var n=b.getAttribute("data-kp");setKText(n==="noisy"?genNoisy():KP[n],n)})});
+  document.querySelectorAll("[data-kv]").forEach(function(b){b.addEventListener("click",function(){var v=b.getAttribute("data-kv");document.querySelectorAll("[data-kv]").forEach(function(x){x.classList.toggle("on",x===b)});$("kf-tableview").hidden=v!=="table";$("kf-csvview").hidden=v!=="csv"})});
+  function readKFile(f){var fr=new FileReader();fr.onload=function(){setKText(String(fr.result))};fr.readAsText(f)}
+  $("kf-file").addEventListener("change",function(e){var f=e.target.files[0];if(f)readKFile(f);e.target.value=""});
+  var dz=$("kf-drop");
+  ["dragenter","dragover"].forEach(function(ev){dz.addEventListener(ev,function(e){e.preventDefault();dz.classList.add("over")})});
+  ["dragleave","drop"].forEach(function(ev){dz.addEventListener(ev,function(e){e.preventDefault();dz.classList.remove("over")})});
+  dz.addEventListener("drop",function(e){var f=e.dataTransfer&&e.dataTransfer.files[0];if(f)readKFile(f)});
+  dz.addEventListener("keydown",function(e){if(e.key==="Enter"||e.key===" "){e.preventDefault();$("kf-file").click()}});
+  $("kf-use").addEventListener("click",function(){
+    if(!lastFit){return}
+    $("r-k").value=lastFit.k.toFixed(4);$("r-ca0").value=lastFit.c0.toFixed(3);rx();
+    $("kf-msg").textContent="Reactor module updated with k = "+lastFit.k.toFixed(4)+" 1/min and C₀ = "+lastFit.c0.toFixed(3)+" mol/L.";
+  });
+
+  /* ---- 2. Neural surrogate ---- */
+  function Net(sz,r){this.sz=sz;this.W=[];this.b=[];this.mW=[];this.vW=[];this.mb=[];this.vb=[];this.t=0;
+    for(var l=0;l<sz.length-1;l++){var i=sz[l],o=sz[l+1],w=new Float64Array(i*o),s=Math.sqrt(2/(i+o));for(var k=0;k<w.length;k++)w[k]=randn(r)*s;
+      this.W.push(w);this.b.push(new Float64Array(o));this.mW.push(new Float64Array(i*o));this.vW.push(new Float64Array(i*o));this.mb.push(new Float64Array(o));this.vb.push(new Float64Array(o))}}
+  Net.prototype.fwd=function(x){var a=[Float64Array.from(x)],L=this.sz.length-1;
+    for(var l=0;l<L;l++){var i=this.sz[l],o=this.sz[l+1],W=this.W[l],b=this.b[l],y=new Float64Array(o),p=a[l];
+      for(var j=0;j<o;j++){var s=b[j];for(var k=0;k<i;k++)s+=W[j*i+k]*p[k];y[j]=l<L-1?Math.tanh(s):s}a.push(y)}return a};
+  Net.prototype.step=function(bx,by,lr){
+    var L=this.sz.length-1,gW=[],gb=[],l,n=bx.length,loss=0;
+    for(l=0;l<L;l++){gW.push(new Float64Array(this.W[l].length));gb.push(new Float64Array(this.b[l].length))}
+    for(var q=0;q<n;q++){
+      var a=this.fwd(bx[q]),err=a[L][0]-by[q];loss+=err*err/n;var d=new Float64Array([err*2/n]);
+      for(l=L-1;l>=0;l--){var i=this.sz[l],o=this.sz[l+1],p=a[l],dn=new Float64Array(i);
+        for(var j=0;j<o;j++){var dj=d[j];gb[l][j]+=dj;for(var k=0;k<i;k++){gW[l][j*i+k]+=dj*p[k];dn[k]+=dj*this.W[l][j*i+k]}}
+        if(l>0)for(var k2=0;k2<i;k2++)dn[k2]*=1-a[l][k2]*a[l][k2];
+        d=dn}}
+    this.t++;var c1=1-Math.pow(0.9,this.t),c2=1-Math.pow(0.999,this.t);
+    for(l=0;l<L;l++){
+      for(var u=0;u<this.W[l].length;u++){var g=gW[l][u];this.mW[l][u]=0.9*this.mW[l][u]+0.1*g;this.vW[l][u]=0.999*this.vW[l][u]+0.001*g*g;this.W[l][u]-=lr*(this.mW[l][u]/c1)/(Math.sqrt(this.vW[l][u]/c2)+1e-8)}
+      for(var v=0;v<this.b[l].length;v++){var h=gb[l][v];this.mb[l][v]=0.9*this.mb[l][v]+0.1*h;this.vb[l][v]=0.999*this.vb[l][v]+0.001*h*h;this.b[l][v]-=lr*(this.mb[l][v]/c1)/(Math.sqrt(this.vb[l][v]/c2)+1e-8)}}
+    return loss};
+  var ml={net:null,busy:false};
+  function mlPredict(q,d,L){var z=[Math.log(q),Math.log(d),Math.log(L)].map(function(v,i){return(v-ml.mx[i])/ml.sx[i]});return Math.exp(ml.net.fwd(z)[3][0]*ml.sy+ml.my)}
+  function velocity(q,d){return q/3600/(Math.PI*d*d/4e6)}
+  function ols(Xr,y){
+    var n=Xr.length,p=4,A=[],b=[],i,j,k;
+    for(i=0;i<p;i++){A.push([0,0,0,0]);b.push(0)}
+    for(k=0;k<n;k++)for(i=0;i<p;i++){b[i]+=Xr[k][i]*y[k];for(j=0;j<p;j++)A[i][j]+=Xr[k][i]*Xr[k][j]}
+    for(i=0;i<p;i++){var mr=i;for(k=i+1;k<p;k++)if(Math.abs(A[k][i])>Math.abs(A[mr][i]))mr=k;
+      var ta=A[i];A[i]=A[mr];A[mr]=ta;var tb=b[i];b[i]=b[mr];b[mr]=tb;
+      for(k=i+1;k<p;k++){var f=A[k][i]/A[i][i];for(j=i;j<p;j++)A[k][j]-=f*A[i][j];b[k]-=f*b[i]}}
+    var beta=[0,0,0,0];for(i=p-1;i>=0;i--){var sm=b[i];for(j=i+1;j<p;j++)sm-=A[i][j]*beta[j];beta[i]=sm/A[i][i]}
+    return beta}
+  function mlStale(){
+    var w=$("ml-warn");if(!w)return;
+    if(typeof ml==="undefined"||!ml||!ml.net){w.textContent="";return}
+    var stale=num("p-e")!==ml.e||num("p-rho")!==ml.rho||num("p-mu")!==ml.mu;sd("ml",!stale);
+    w.textContent=stale?"Roughness, density or viscosity in the Pipe flow module changed after training. Click \"Retrain model\" so the predictions match.":"";
+  }
+  function mlLive(){
+    mlStale();
+    if(!ml.net){$("ml-live").innerHTML="";nnViz();return}
+    var q=num("ml-q"),d=num("ml-d"),L=num("ml-l");
+    if(!(q>0&&d>0&&L>0)){$("ml-live").innerHTML="";nnViz();return}
+    var p=mlPredict(q,d,L),ex=pipeCalc(q,d,L,ml.e,ml.rho,ml.mu).dp,v=velocity(q,d),out=v<0.1||v>6;
+    resBox($("ml-live"),[["Neural net ΔP (kPa)",fmt(p,2)],["Physics ΔP (kPa)",fmt(ex,2)],["Difference",fmt((p-ex)/ex*100,2)+" %",out],["Velocity (m/s)",fmt(v,2)+(out?" (outside range)":"")]]);nnViz(q,d,L);
+  }
+  function mlTrain(){
+    if(ml.busy)return;ml.busy=true;$("ml-train").disabled=true;
+    var e=num("p-e"),rho=num("p-rho"),mu=num("p-mu"),noise=num("ml-noise")/100;
+    if(!(rho>0&&mu>0&&e>=0)){e=0.045;rho=998;mu=1}
+    if(!(noise>=0&&noise<=0.5))noise=0.03;
+    var r=rng(2026),N=1500,X=[],XR=[],Y=[],Yc=[],raw=[],rawN=[],i;
+    while(X.length<N){
+      var q=Math.exp(Math.log(5)+r()*(Math.log(150)-Math.log(5))),d=Math.exp(Math.log(25)+r()*(Math.log(250)-Math.log(25))),L=Math.exp(Math.log(10)+r()*(Math.log(1000)-Math.log(10)));
+      var v=velocity(q,d);if(v<0.1||v>6)continue;
+      var dp=pipeCalc(q,d,L,e,rho,mu).dp,dn=Math.max(dp*(1+noise*randn(r)),dp*0.05);
+      X.push([Math.log(q),Math.log(d),Math.log(L)]);XR.push([1,q,d,L]);Y.push(Math.log(dn));Yc.push(Math.log(dp));raw.push(dp);rawN.push(dn)}
+    var ntr=Math.floor(N*0.8),mx=[0,1,2].map(function(j){return mean(X.slice(0,ntr).map(function(x){return x[j]}))}),sx=[0,1,2].map(function(j){return std(X.slice(0,ntr).map(function(x){return x[j]}))});
+    var my=mean(Y.slice(0,ntr)),sy=std(Y.slice(0,ntr));
+    var Z=X.map(function(x){return x.map(function(v,j){return(v-mx[j])/sx[j]})}),T=Y.map(function(y){return(y-my)/sy}),Tc=Yc.map(function(y){return(y-my)/sy});
+    var net=new Net([3,16,16,1],rng(7)),EP=120,ep=0,idx=[];for(i=0;i<ntr;i++)idx.push(i);
+    var trL=[],teL=[];
+    function testMSE(){var s=0;for(var k=ntr;k<N;k++){var o=net.fwd(Z[k])[3][0],er=o-Tc[k];s+=er*er}return s/(N-ntr)}
+    function frame(){
+      for(var rep=0;rep<2&&ep<EP;rep++){
+        for(var a=idx.length-1;a>0;a--){var b=Math.floor(r()*(a+1)),tmp=idx[a];idx[a]=idx[b];idx[b]=tmp}
+        var lr=0.01*(0.03+0.97*0.5*(1+Math.cos(Math.PI*ep/EP))),tot=0,cnt=0;for(var s=0;s<ntr;s+=64){var bx=[],by=[];for(var k=s;k<Math.min(s+64,ntr);k++){bx.push(Z[idx[k]]);by.push(T[idx[k]])}tot+=net.step(bx,by,lr)*bx.length;cnt+=bx.length}
+        trL.push(Math.log10(tot/cnt));teL.push(Math.log10(testMSE()));ep++}
+      var xs=trL.map(function(_,j){return j+1});
+      var yr=ext(trL.concat(teL),0.08);
+      plot($("ml-loss"),{ro:$("mll-ro"),xn:"epoch",h:240,xmin:1,xmax:EP,ymin:yr[0],ymax:yr[1],xl:"Epoch",yl:"log10 MSE",lines:[{name:"train",pts:xs.map(function(x,j){return[x,trL[j]]}),color:"var(--s2)"},{name:"test",pts:xs.map(function(x,j){return[x,teL[j]]}),color:"var(--accent)"}]});
+      $("ml-status").textContent="Training... epoch "+ep+" of "+EP;
+      if(ep<EP){requestAnimationFrame(frame);return}
+      ml.net=net;ml.mx=mx;ml.sx=sx;ml.my=my;ml.sy=sy;ml.e=e;ml.rho=rho;ml.mu=mu;
+      var act=[],pr=[],ne=[],le=[],mape=0,mx2=0,sst=0,ssr=0,sstP=0,ssrP=0,ma=mean(Yc.slice(ntr)),mr=mean(raw.slice(ntr)),k2;
+      for(k2=ntr;k2<N;k2++){var p=Math.exp(net.fwd(Z[k2])[3][0]*sy+my);act.push(raw[k2]);pr.push(p);var er=Math.abs(p-raw[k2])/raw[k2];mape+=er;ne.push(er);mx2=Math.max(mx2,er);
+        var yl=Math.log(p);sst+=(Yc[k2]-ma)*(Yc[k2]-ma);ssr+=(Yc[k2]-yl)*(Yc[k2]-yl);sstP+=(raw[k2]-mr)*(raw[k2]-mr);ssrP+=(raw[k2]-p)*(raw[k2]-p)}
+      mape/=act.length;
+      var beta=ols(XR.slice(0,ntr),rawN.slice(0,ntr)),lp=[],lmape=0,ssrL=0;
+      for(k2=ntr;k2<N;k2++){var pl=beta[0]+beta[1]*XR[k2][1]+beta[2]*XR[k2][2]+beta[3]*XR[k2][3];lp.push(pl);le.push(Math.abs(pl-raw[k2])/raw[k2]);lmape+=le[le.length-1];ssrL+=(raw[k2]-pl)*(raw[k2]-pl)}
+      lmape/=lp.length;
+      var r2nn=1-ssrP/sstP,r2lin=1-ssrL/sstP;
+      ml.rows=[];for(var z=0;z<act.length;z++){var kk=ntr+z;ml.rows.push([XR[kk][1].toFixed(3),XR[kk][2].toFixed(2),XR[kk][3].toFixed(2),raw[kk].toPrecision(6),pr[z].toPrecision(6),((pr[z]-raw[kk])/raw[kk]*100).toFixed(3),lp[z].toPrecision(6)])}
+      $("ml-csv").disabled=false;
+      resBox($("ml-res"),[["Neural net R² (clean)",fmt(r2nn,4)],["Linear baseline R² (clean)",fmt(r2lin,4),r2lin<r2nn],["Neural net mean error",fmt(mape*100,2)+" %"],["Linear baseline mean error",fmt(lmape*100,1)+" %",lmape>mape],["Median error (neural / linear)",fmt(pct(ne.slice().sort(function(a,b){return a-b}),0.5)*100,2)+" % / "+fmt(pct(le.slice().sort(function(a,b){return a-b}),0.5)*100,1)+" %"],["Neural net worst case",fmt(mx2*100,2)+" %"],["Neural net R² (log ΔP)",fmt(1-ssr/sst,5)],["Training noise σ",fmt(noise*100,1)+" %"],["Train / test cases",ntr+" / "+(N-ntr)]]);
+      var la=act.map(function(v){return Math.log10(v)}),lq=pr.map(function(v){return Math.log10(v)}),rg=ext(la.concat(lq),0.04);
+      plot($("ml-par"),{ro:$("mlp-ro"),xn:"actual",h:300,xmin:rg[0],xmax:rg[1],ymin:rg[0],ymax:rg[1],nozero:true,xl:"Actual (clean) log10 ΔP (kPa)",yl:"Predicted log10 ΔP (kPa)",lines:[{pts:[[rg[0],rg[0]],[rg[1],rg[1]]],color:"var(--muted)",dash:"5 4",w:1.5}],dots:[{name:"predicted",pts:la.map(function(v,j){return[v,lq[j]]}),color:"var(--accent)",r:3,op:.7}]});
+      $("ml-status").textContent="Trained for "+EP+" epochs on noisy targets (σ = "+fmt(noise*100,1)+" %). Scores use the "+(N-ntr)+" cases held out from training, compared with clean physics.";
+      $("ml-train").disabled=false;$("ml-train").textContent="Retrain model";ml.busy=false;mlLive();
+    }
+    $("ml-status").textContent="Generating data...";requestAnimationFrame(frame);
+  }
+  $("ml-train").addEventListener("click",mlTrain);
+  ["ml-q","ml-d","ml-l"].forEach(function(id){$(id).addEventListener("input",mlLive)});
+
+
+  /* ---- Neural network visualizer ---- */
+  var NNV={};
+  function nnBuild(){
+    var svg=$("nn-viz");if(!svg)return;
+    var NS="http://www.w3.org/2000/svg",W=680,H=300,sz=[3,16,16,1],xs=[110,263,417,570];
+    var mk=function(tag,at,parent){var e=document.createElementNS(NS,tag);for(var k in at)e.setAttribute(k,at[k]);(parent||svg).appendChild(e);return e};
+    svg.setAttribute("viewBox","0 0 "+W+" "+H);svg.innerHTML="";
+    var ys=sz.map(function(n){var st=n===3?46:(n===1?0:15.5),y0=162-(n-1)*st/2,a=[];for(var i=0;i<n;i++)a.push(y0+i*st);return a});
+    var gl=mk("g",{}),l,i,j;NNV.lines=[];
+    for(l=0;l<3;l++){var arr=[];for(j=0;j<sz[l+1];j++)for(i=0;i<sz[l];i++)arr.push({i:i,j:j,el:mk("line",{x1:xs[l],y1:ys[l][i],x2:xs[l+1],y2:ys[l+1][j],stroke:"var(--line)","stroke-width":.6,opacity:.4},gl)});NNV.lines.push(arr)}
+    NNV.nodes=[];
+    for(l=0;l<4;l++){var na=[],r=(l===0||l===3)?9:5.2;for(i=0;i<sz[l];i++){mk("circle",{cx:xs[l],cy:ys[l][i],r:r,fill:"var(--panel)"});na.push(mk("circle",{cx:xs[l],cy:ys[l][i],r:r,fill:"var(--accent)","fill-opacity":0,stroke:"var(--muted)","stroke-width":1.2}))}NNV.nodes.push(na)}
+    ["Input","Hidden 1 · tanh","Hidden 2 · tanh","Output"].forEach(function(t,k){mk("text",{x:xs[k],y:18,"text-anchor":"middle"}).textContent=t});
+    NNV.names=["Q","D","L"];NNV.units=["m³/h","mm","m"];NNV.inT=[0,1,2].map(function(k){var e=mk("text",{x:xs[0]-16,y:ys[0][k]+4,"text-anchor":"end"});e.textContent=NNV.names[k];return e});
+    NNV.out=mk("text",{x:xs[3]+16,y:ys[3][0]+4});NNV.out.textContent="ΔP";
+  }
+  function nnViz(q,d,L){
+    if(!NNV.nodes)return;
+    var note=$("nn-note"),l,i,j;
+    if(!ml.net||!(q>0&&d>0&&L>0)){
+      NNV.nodes.forEach(function(a){a.forEach(function(n){n.setAttribute("fill-opacity",0)})});
+      NNV.lines.forEach(function(a){a.forEach(function(o){o.el.setAttribute("stroke","var(--line)");o.el.setAttribute("opacity",.4);o.el.setAttribute("stroke-width",.6)})});
+      NNV.inT.forEach(function(t,k){t.textContent=NNV.names[k]});NNV.out.textContent="ΔP";
+      note.textContent=ml.net?"Enter positive values in Try the trained model.":"Train the model to light up the network.";return}
+    var z=[Math.log(q),Math.log(d),Math.log(L)].map(function(v,k){return(v-ml.mx[k])/ml.sx[k]}),a=ml.net.fwd(z);
+    for(l=0;l<4;l++)for(i=0;i<a[l].length;i++){var v=Math.max(-1,Math.min(1,a[l][i]/(l===0||l===3?2.5:1)));NNV.nodes[l][i].setAttribute("fill",v>=0?"var(--accent)":"var(--warn)");NNV.nodes[l][i].setAttribute("fill-opacity",(0.1+0.9*Math.abs(v)).toFixed(2))}
+    for(l=0;l<3;l++){var arr=NNV.lines[l],inn=a[l].length,W_=ml.net.W[l],cs=arr.map(function(o){return W_[o.j*inn+o.i]*a[l][o.i]}),mxv=Math.max.apply(null,cs.map(Math.abs))||1;
+      arr.forEach(function(o,k){var rr=Math.abs(cs[k])/mxv;o.el.setAttribute("stroke",cs[k]>=0?"var(--accent)":"var(--warn)");o.el.setAttribute("opacity",(0.06+0.94*rr*rr).toFixed(2));o.el.setAttribute("stroke-width",(0.4+1.6*rr).toFixed(2))})}
+    [q,d,L].forEach(function(val,k){NNV.inT[k].textContent=NNV.names[k]+" "+fmt(val,1)+" "+NNV.units[k]});
+    NNV.out.textContent="ΔP "+fmt(Math.exp(a[3][0]*ml.sy+ml.my),2)+" kPa";
+    note.textContent="Line brightness shows how strongly each weight pushes the next neuron up (teal) or down (orange). Node fill shows the activation. Change the values in Try the trained model to see the signal move.";
+  }
+
+  /* ---- 3. Monte Carlo ---- */
+  function mc(){
+    var names=["Flow rate","Diameter","Length","Roughness","Density","Viscosity"],ids=["p-q","p-d","p-l","p-e","p-rho","p-mu"],sg=["mc-q","mc-d","mc-l","mc-e","mc-rho","mc-mu"];
+    var base=ids.map(num),sig=sg.map(function(i){return num(i)/100});
+    if(!(base[0]>0&&base[1]>0&&base[2]>0&&base[4]>0&&base[5]>0&&base[3]>=0)||sig.some(function(s){return!(s>=0)})){sd("mc",false);$("mc-msg").textContent="Check the Pipe flow inputs and use zero or positive uncertainty values.";return}
+    $("mc-msg").textContent="";sd("mc",true);
+    var r=rng(42),N=5000,out=[],ins=[[],[],[],[],[],[]],i,j;
+    for(i=0;i<N;i++){var v=base.map(function(b,k){var x=b*(1+sig[k]*randn(r));if(k===3)return Math.max(x,0);return Math.max(x,b*0.05)});
+      for(j=0;j<6;j++)ins[j].push(v[j]);out.push(pipeCalc(v[0],v[1],v[2],v[3],v[4],v[5]).dp)}
+    mcRows=out.map(function(o,q){return[ins[0][q],ins[1][q],ins[2][q],ins[3][q],ins[4][q],ins[5][q],o].map(function(v){return Number(v).toPrecision(6)})});
+    var nom=pipeCalc(base[0],base[1],base[2],base[3],base[4],base[5]).dp,s=out.slice().sort(function(a,b){return a-b}),mu=mean(out),stdev=std(out),p5=pct(s,0.05),p95=pct(s,0.95);
+    resBox($("mc-res"),[["Nominal ΔP (kPa)",fmt(nom,2)],["Mean ΔP (kPa)",fmt(mu,2)],["Std. deviation (kPa)",fmt(stdev,2)],["Spread (σ / mean)",fmt(stdev/mu*100,1)+" %"],["5th percentile (kPa)",fmt(p5,2)],["95th percentile (kPa)",fmt(p95,2)]]);
+    var lo=pct(s,0.005),hi=pct(s,0.995),nb=32,bw=(hi-lo)/nb||1,cnt=[];for(i=0;i<nb;i++)cnt.push(0);
+    out.forEach(function(v){if(v>=lo&&v<=hi){var b=Math.min(nb-1,Math.floor((v-lo)/bw));cnt[b]++}});
+    var bars=cnt.map(function(c,b){return[lo+b*bw,lo+(b+1)*bw,c/N*100]});
+    plot($("mc-hist"),{ro:$("mc-ro"),xn:"ΔP",xmin:lo,xmax:hi,ymin:0,ymax:Math.max.apply(null,cnt)/N*100*1.1,xl:"Pressure drop (kPa)",yl:"Share of runs (%)",bars:bars,vlines:[{x:Math.min(Math.max(nom,lo),hi),color:"var(--warn)"},{x:Math.max(p5,lo),color:"var(--s2)"},{x:Math.min(p95,hi),color:"var(--s2)"}]});
+    var cs=names.map(function(n,k){return[n,sig[k]>0?corr(ins[k],out):0]}).sort(function(a,b){return Math.abs(b[1])-Math.abs(a[1])});
+    $("mc-tor").innerHTML=cs.map(function(c){return'<div><span>'+c[0]+'</span><span class="bar"><i class="'+(c[1]<0?"neg":"")+'" style="width:'+Math.min(100,Math.abs(c[1])*100).toFixed(1)+'%"></i></span><b>'+(c[1]>=0?"+":"")+c[1].toFixed(2)+'</b></div>'}).join("");
+  }
+  ["mc-q","mc-d","mc-l","mc-e","mc-rho","mc-mu"].forEach(function(id){$(id).addEventListener("input",mc)});
+
+  /* ---- 4. Optimizer ---- */
+  var STD=[25,32,40,50,65,80,100,125,150,200,250,300],CUR={usd:{sym:"$",loc:"en-US"},inr:{sym:"₹",loc:"en-IN"}},curKey="usd",lastOpt=null;
+  function money(x){var c=CUR[curKey];return c.sym+x.toLocaleString(c.loc,{maximumFractionDigits:0})}
+  function setCur(){document.querySelectorAll(".cur").forEach(function(n){n.textContent=CUR[curKey].sym})}
+  function opt(){
+    var q=num("p-q"),L=num("p-l"),e=num("p-e"),rho=num("p-rho"),mu=num("p-mu"),dcur=num("p-d"),a=num("op-a"),ann=num("op-ann"),eta=num("op-eta"),price=num("op-price"),hrs=num("op-hrs");
+    $("op-ok").textContent="";lastOpt=null;
+    if(!(q>0&&L>0&&e>=0&&rho>0&&mu>0&&a>0&&ann>0&&eta>0&&eta<=1&&price>=0&&hrs>0)){sd("opt",false);$("op-msg").textContent="Check the Pipe flow inputs and use positive cost values (efficiency between 0 and 1).";return}
+    $("op-msg").textContent="";sd("opt",true);
+    function cost(D){var dp=pipeCalc(q,D,L,e,rho,mu).dp,pw=q/3600*dp/eta,en=pw*hrs*price,cap=ann*a*Math.pow(D,1.4)*L;return{cap:cap,en:en,tot:cap+en,dp:dp,pw:pw}}
+    var best=15,bc=cost(15).tot,D;for(D=15;D<=400;D++){var c=cost(D).tot;if(c<bc){bc=c;best=D}}
+    var lo=best-1,hi=best+1,gr=(Math.sqrt(5)-1)/2;
+    for(var it=0;it<60;it++){var x1=hi-gr*(hi-lo),x2=lo+gr*(hi-lo);if(cost(x1).tot<cost(x2).tot)hi=x2;else lo=x1}
+    var dopt=(lo+hi)/2,co=cost(dopt),cc=dcur>0?cost(dcur):null;
+    var nstd=STD.reduce(function(p,s){return Math.abs(s-dopt)<Math.abs(p-dopt)?s:p}),cs=cost(nstd);
+    lastOpt={nstd:nstd,dopt:dopt};
+    resBox($("op-res"),[["Optimal diameter (mm)",fmt(dopt,1)],["Nearest standard size (mm)",nstd],["Cost at standard size (/yr)",money(cs.tot)],["Cost at optimum (/yr)",money(co.tot)],["Velocity at optimum (m/s)",fmt(velocity(q,dopt),2)],["ΔP at optimum (kPa)",fmt(co.dp,1)],["Your current diameter",fmt(dcur,0)+" mm"],["Current design cost (/yr)",cc?money(cc.tot)+(cc.tot>cs.tot*1.0005?" ("+fmt((cc.tot/cs.tot-1)*100,0)+"% above standard optimum)":""):"-"]]);
+    var pts=[],d;for(d=15;d<=400;d+=1.5){var cd=cost(d);if(cd.tot<=bc*3)pts.push([d,cd])}
+    if(pts.length<2)return;
+    var ymax=bc*3;
+    plot($("op-chart"),{ro:$("op-ro"),xn:"D (mm)",xmin:pts[0][0],xmax:pts[pts.length-1][0],ymin:0,ymax:ymax,xl:"Diameter (mm)",yl:"Annual cost ("+CUR[curKey].sym+"/yr)",
+      lines:[{name:"pipe",pts:pts.map(function(p){return[p[0],Math.min(p[1].cap,ymax)]}),color:"var(--s2)"},{name:"energy",pts:pts.map(function(p){return[p[0],Math.min(p[1].en,ymax)]}),color:"var(--warn)"},{name:"total",pts:pts.map(function(p){return[p[0],p[1].tot]}),color:"var(--accent)",w:3}],
+      vlines:[{x:dopt,color:"var(--ok)"}]});
+  }
+  ["op-a","op-ann","op-eta","op-price","op-hrs"].forEach(function(id){$(id).addEventListener("input",opt)});
+  $("op-cur").addEventListener("change",function(){
+    var nk=$("op-cur").value,fx=num("op-fx");
+    if(!(fx>0)){$("op-cur").value=curKey;$("op-msg").textContent="Enter a positive exchange rate first.";return}
+    if(nk!==curKey){var f=nk==="inr"?fx:1/fx;["op-a","op-price"].forEach(function(id){$(id).value=+(num(id)*f).toPrecision(4)});curKey=nk;setCur()}
+    opt();
+  });
+  $("op-use").addEventListener("click",function(){
+    if(!lastOpt)return;var sz=lastOpt.nstd;
+    $("p-d").value=sz;pipe();opt();
+    $("op-ok").textContent="Pipe flow diameter set to "+sz+" mm. The Pipe flow module and its results are updated.";
+  });
+
+  /* ---- 5. Anomaly detection ---- */
+  var anSeed=99;
+  function anom(){
+    var D=num("p-d"),L=num("p-l"),Q0=num("p-q"),e=num("p-e"),rho=num("p-rho"),mu=num("p-mu");
+    var type=$("an-type").value,on=Math.round(num("an-on")),sev=num("an-sev")/100,nz=num("an-noise")/100,useNN=$("an-model").value==="nn",N=200,i;
+    if(!(D>0&&L>0&&Q0>0&&rho>0&&mu>0&&e>=0&&nz>=0&&sev>=0&&on>=70&&on<=190)){sd("anom",false);$("an-msg").textContent="Check the inputs: the fault must start between reading 70 and 190, and sizes must be zero or positive. Pipe flow inputs must be positive.";return}
+    var note="",r=rng(anSeed);
+    if(useNN&&!ml.net){useNN=false;note="The neural surrogate is not trained yet, so the physics model is used. Train it in the Neural surrogate tab to use it here."}
+    else if(useNN&&(e!==ml.e||rho!==ml.rho||mu!==ml.mu)){note="The fluid properties in the Pipe flow module (roughness, density or viscosity) changed after the neural surrogate was trained. Retrain it in the Neural surrogate tab so its predictions match, otherwise the residuals can show false anomalies."}
+    var qs=[],meas=[],pred=[],rel=[],lab=[],outRange=0;
+    for(i=0;i<N;i++){
+      var q=Math.max(Q0*(1+0.10*Math.sin(2*Math.PI*i/50)+0.02*randn(r)),Q0*0.3),clean=pipeCalc(q,D,L,e,rho,mu).dp,fm=1;
+      if(i>=on)fm=type==="foul"?1+sev*(i-on)/Math.max(N-1-on,1):1+sev;
+      var mz=clean*fm*(1+nz*randn(r)),pp=clean;
+      if(useNN){var v=velocity(q,D);if(v<0.1||v>6)outRange++;pp=mlPredict(q,D,L)}
+      qs.push(q);meas.push(mz);pred.push(pp);rel.push((mz-pp)/pp);lab.push(i>=on)}
+    if(outRange>0)note=(note?note+" ":"")+outRange+" readings are outside the surrogate's training range (0.1 to 6 m/s), so its predictions there are less reliable.";
+    $("an-msg").textContent=note;sd("anom",true);
+    var nb=60,m0=mean(rel.slice(0,nb)),s0=Math.max(std(rel.slice(0,nb)),1e-4),z=rel.map(function(x){return(x-m0)/s0});
+    var tp=0,fp=0,fn=0,tn=0,first=-1;
+    for(i=0;i<N;i++){var fl=Math.abs(z[i])>2.5;if(fl&&lab[i])tp++;else if(fl)fp++;else if(lab[i])fn++;else tn++;if(fl&&lab[i]&&first<0)first=i}
+    var prec=tp+fp>0?tp/(tp+fp):NaN,rec=tp+fn>0?tp/(tp+fn):0,f1=(prec>0&&rec>0)?2*prec*rec/(prec+rec):0;
+    resBox($("an-res"),[["Precision",isFinite(prec)?fmt(prec,3):"no alarms"],["Recall",fmt(rec,3)],["F1 score",fmt(f1,3)],["Readings flagged",tp+fp],["False alarms",fp+" of "+(on)+" healthy"],["First alarm after start",first>=0?(first-on)+" readings":"none"],["Healthy-period σ (relative)",fmt(s0*100,2)+" %"],["Predictor",useNN?"Neural surrogate":"Physics model"]]);
+    var zs=z.map(function(v,j){return[j,v]}),flagged=zs.filter(function(p){return Math.abs(p[1])>2.5}),yr=ext(z.concat([2.5,-2.5]),0.08);
+    plot($("an-chart"),{ro:$("an-ro"),xn:"reading",xmin:0,xmax:N-1,ymin:yr[0],ymax:yr[1],xl:"Reading number",yl:"z-score",
+      lines:[{name:"z",pts:zs,color:"var(--s2)",w:1.5},{pts:[[0,2.5],[N-1,2.5]],color:"var(--warn)",dash:"6 4",w:1.5},{pts:[[0,-2.5],[N-1,-2.5]],color:"var(--warn)",dash:"6 4",w:1.5}],
+      dots:[{pts:flagged,color:"var(--warn)",r:4,op:.9}],vlines:[{x:on,color:"var(--ok)"}]});
+    var ymx=Math.max.apply(null,meas.concat(pred))*1.08,ymn=Math.min.apply(null,meas.concat(pred))*0.92;
+    plot($("an-dp"),{ro:$("an-dpro"),xn:"reading",h:240,xmin:0,xmax:N-1,ymin:ymn,ymax:ymx,xl:"Reading number",yl:"ΔP (kPa)",
+      lines:[{name:"measured",pts:meas.map(function(v,j){return[j,v]}),color:"var(--warn)",w:1.5},{name:"predicted",pts:pred.map(function(v,j){return[j,v]}),color:"var(--accent)",w:2}],vlines:[{x:on,color:"var(--ok)"}]});
+  }
+  ["an-on","an-sev","an-noise"].forEach(function(id){$(id).addEventListener("input",anom)});
+  ["an-type","an-model"].forEach(function(id){$(id).addEventListener("change",anom)});
+  $("an-new").addEventListener("click",function(){anSeed+=7;anom()});
+
+  /* ---- tabs ---- */
+  var labCur="fit";
+  function labTab(t){
+    labCur=t;
+    document.querySelectorAll(".tabbtn").forEach(function(b){var on=b.getAttribute("data-t")===t;b.classList.toggle("on",on);b.setAttribute("aria-selected",on?"true":"false");
+      if(on){try{var bar=$("labtabs");bar.scrollTo({left:b.offsetLeft-bar.clientWidth/2+b.clientWidth/2,behavior:"smooth"})}catch(err){}}});
+    document.querySelectorAll(".tabp").forEach(function(p){p.hidden=p.id!=="t-"+t});
+    if(t==="fit")kfit();else if(t==="ml"){if(!ml.net&&!ml.busy)mlTrain();else mlLive()}else if(t==="mc")mc();else if(t==="anom")anom();else opt();
+  }
+  document.querySelectorAll(".tabbtn").forEach(function(b){b.addEventListener("click",function(){labTab(b.getAttribute("data-t"))})});
+
+  /* ---- CSV export and report ---- */
+  function dl(name,text){var a=document.createElement("a");a.href=URL.createObjectURL(new Blob([text],{type:"text/csv"}));a.download=name;document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(a.href);a.remove()},500)}
+  $("kf-csv").addEventListener("click",function(){if(kfRows.length)dl("kinetics_fit.csv","t_min,C_measured,C_fitted,residual\n"+kfRows.map(function(r){return r.join(",")}).join("\n"))});
+  $("ml-csv").addEventListener("click",function(){if(ml.rows)dl("neural_surrogate_test_predictions.csv","flow_m3h,diameter_mm,length_m,dp_physics_kPa,dp_neural_kPa,neural_error_pct,dp_linear_kPa\n"+ml.rows.map(function(r){return r.join(",")}).join("\n"))});
+  $("mc-csv").addEventListener("click",function(){if(mcRows.length)dl("monte_carlo_runs.csv","flow_m3h,diameter_mm,length_m,roughness_mm,density_kg_m3,viscosity_mPas,dp_kPa\n"+mcRows.map(function(r){return r.join(",")}).join("\n"))});
+  $("print-btn").addEventListener("click",function(){window.print()});
+  /* ---- process presets ---- */
+  var PRE={
+    cool:{q:30,d:80,l:120,e:0.045,rho:998,mu:1.0,note:"Cooling water loop: water, 30 m³/h in an 80 mm line, 120 m long."},
+    crude:{q:45,d:150,l:300,e:0.045,rho:890,mu:25,note:"Viscous crude transfer: heavy oil (890 kg/m³, 25 mPa·s), 45 m³/h in a 150 mm line, 300 m long."},
+    solv:{q:60,d:65,l:80,e:0.045,rho:790,mu:0.32,note:"High-velocity solvents: acetone-type liquid (790 kg/m³, 0.32 mPa·s), 60 m³/h in a 65 mm line, 80 m long."}};
+  function setPre(n){document.querySelectorAll("#presetbar .chip").forEach(function(b){b.classList.toggle("on",b.getAttribute("data-pre")===n)})}
+  document.querySelectorAll("#presetbar .chip").forEach(function(b){b.addEventListener("click",function(){
+    var n=b.getAttribute("data-pre"),P=PRE[n];
+    $("p-q").value=P.q;$("p-d").value=P.d;$("p-l").value=P.l;$("p-e").value=P.e;$("p-rho").value=P.rho;$("p-mu").value=P.mu;
+    pipe();hx();rx();mix();show(cur);setPre(n);$("preset-note").textContent=P.note+" The Data Lab now uses these values.";
+    labTab(labCur);
+  })});
+  ["p-q","p-d","p-l","p-e","p-rho","p-mu"].forEach(function(id){$(id).addEventListener("input",function(){setPre(null)})});
+
+  nnBuild();nnViz();renderTable();setPreset("first");kfit();
+})();
+</script>
+
+</body>
+</html>
